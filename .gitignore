@@ -6,6 +6,8 @@
 /.coverage*
 /lbry-venv
 /venv
+/.venv
+/.venv-lbry
 /lbry/blockchain
 
 lbry.egg-info

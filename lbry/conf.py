@@ -594,6 +594,8 @@ class Config(CLIConfig):
 
     # directories
     data_dir = Path("Directory path to store blobs.", metavar='DIR')
+    # Optional additional blob directories (e.g., other disks)
+    blob_dirs = Strings("Additional directories to store blob files (in addition to data_dir/blobfiles).", [])
     download_dir = Path(
         "Directory path to place assembled files downloaded from LBRY.",
         previous_names=['download_directory'], metavar='DIR'
@@ -635,6 +637,10 @@ class Config(CLIConfig):
     hub_timeout = Float("Timeout when making a hub request", 30.0)
     peer_connect_timeout = Float("Timeout to establish a TCP connection to a peer", 3.0)
     node_rpc_timeout = Float("Timeout when making a DHT request", constants.RPC_TIMEOUT)
+    # DHT tuning
+    dht_alpha = Integer("Parallel probes per DHT lookup (ALPHA)", 5)
+    dht_k = Integer("Bucket size and result target (K)", 8)
+    dht_iter_delay = Float("Delay between iterative lookup probes (seconds)", constants.RPC_TIMEOUT/2.0)
 
     # blob announcement and download
     save_blobs = Toggle("Save encrypted blob files for hosting, otherwise download blobs to memory only.", True)
@@ -656,6 +662,14 @@ class Config(CLIConfig):
         "Maximum number of peers to connect to while downloading a blob", 4,
         previous_names=['max_connections_per_stream']
     )
+    # per-stream parallelism
+    stream_prefetch_window = Integer(
+        "Number of upcoming blobs per stream to prefetch in parallel (0 disables prefetch).",
+        0
+    )
+    stream_prefetch_workers = Integer(
+        "Maximum concurrent blob downloads per stream when prefetching.", 2
+    )
     concurrent_hub_requests = Integer("Maximum number of concurrent hub requests", 32)
     fixed_peer_delay = Float(
         "Amount of seconds before adding the reflector servers as potential peers to download from in case dht"
@@ -674,6 +688,17 @@ class Config(CLIConfig):
     )
     concurrent_reflector_uploads = Integer(
         "Maximum number of streams to upload to a reflector server at a time", 10
+    )
+
+    # concurrency caps
+    stream_load_concurrency = Integer(
+        "Maximum number of streams to initialize from the database concurrently at startup.", 24
+    )
+    stream_save_concurrency = Integer(
+        "Maximum number of concurrent resume save_file operations after startup.", 8
+    )
+    claim_callback_concurrency = Integer(
+        "Maximum number of concurrent claim-update callbacks that refresh file metadata.", 24
     )
 
     # servers
@@ -734,6 +759,12 @@ class Config(CLIConfig):
         "Allowed `Origin` header value for API request (sent by browser), use * to allow "
         "all hosts; default is to only allow API requests with no `Origin` value.", "")
 
+    # LAN discovery (local network peer discovery)
+    lan_discovery = Toggle("Enable LAN multicast discovery of local DHT peers", True)
+    lan_discovery_group = String("Multicast group for LAN discovery", '239.255.42.42')
+    lan_discovery_port = Integer("UDP port for LAN discovery", 54915)
+    lan_discovery_interval = Integer("Seconds between LAN discovery advertisements", 30)
+
     # media server
     streaming_server = String('Host name and port to serve streaming media over range requests',
                               'localhost:5280', metavar='HOST:PORT')
@@ -749,6 +780,19 @@ class Config(CLIConfig):
     save_resolved_claims = Toggle(
         "Save content claims to the database when they are resolved to keep file_list up to date, "
         "only disable this if file_x commands are not needed", True
+    )
+
+    # logging
+    log_format = StringChoice(
+        "Log output format: 'text' or 'json'", ["text", "json"], "text"
+    )
+    quiet_wallet_sync = Toggle(
+        "Reduce noisy wallet sync logs (address subscription lines)", True
+    )
+
+    # stream progress logging
+    stream_progress_interval = Integer(
+        "Seconds between progress heartbeats for active stream downloads (0 disables)", 0
     )
 
     @property

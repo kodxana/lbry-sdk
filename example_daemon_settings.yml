@@ -19,7 +19,13 @@ dht_node_port: 4444
 peer_port: 3333
 use_upnp: true
 
+# Concurrency caps (tune for your environment)
+# stream_load_concurrency: 24        # max streams initialized in parallel during startup
+# stream_save_concurrency: 8         # max concurrent save_file resumes after startup
+# claim_callback_concurrency: 24     # max concurrent claim-update callbacks
+
 #components_to_skip:
 #  - hash_announcer
 #  - blob_server
 #  - dht
+#  - libtorrent_component   # torrent support is optional/incomplete; skip by default

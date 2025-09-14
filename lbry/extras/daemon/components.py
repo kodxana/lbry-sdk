@@ -6,6 +6,7 @@ import binascii
 import typing
 
 import base58
+import importlib
 
 from aioupnp import __version__ as aioupnp_version
 from aioupnp.upnp import UPnP
@@ -13,22 +14,22 @@ from aioupnp.fault import UPnPError
 
 from lbry import utils
 from lbry.dht.node import Node
+from lbry.dht import constants as dht_constants
 from lbry.dht.peer import is_valid_public_ipv4
 from lbry.dht.blob_announcer import BlobAnnouncer
 from lbry.blob.blob_manager import BlobManager
 from lbry.blob.disk_space_manager import DiskSpaceManager
 from lbry.blob_exchange.server import BlobServer
 from lbry.stream.background_downloader import BackgroundDownloader
+from lbry.extras.daemon.lan_discovery import LANDiscovery
 from lbry.stream.stream_manager import StreamManager
 from lbry.file.file_manager import FileManager
 from lbry.extras.daemon.component import Component
 from lbry.extras.daemon.exchange_rate_manager import ExchangeRateManager
 from lbry.extras.daemon.storage import SQLiteStorage
-from lbry.torrent.torrent_manager import TorrentManager
 from lbry.wallet import WalletManager
 from lbry.wallet.usage_payment import WalletServerPayer
 from lbry.torrent.tracker import TrackerClient
-from lbry.torrent.session import TorrentSession
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ UPNP_COMPONENT = "upnp"
 EXCHANGE_RATE_MANAGER_COMPONENT = "exchange_rate_manager"
 TRACKER_ANNOUNCER_COMPONENT = "tracker_announcer_component"
 LIBTORRENT_COMPONENT = "libtorrent_component"
+LAN_DISCOVERY_COMPONENT = "lan_discovery"
 
 
 class DatabaseComponent(Component):
@@ -63,7 +65,7 @@ class DatabaseComponent(Component):
 
     @staticmethod
     def get_current_db_revision():
-        return 15
+        return 16
 
     @property
     def revision_filename(self):
@@ -222,10 +224,20 @@ class BlobComponent(Component):
             dht_node: Node = self.component_manager.get_component(DHT_COMPONENT)
             if dht_node:
                 data_store = dht_node.protocol.data_store
-        blob_dir = os.path.join(self.conf.data_dir, 'blobfiles')
-        if not os.path.isdir(blob_dir):
-            os.mkdir(blob_dir)
-        self.blob_manager = BlobManager(self.component_manager.loop, blob_dir, storage, self.conf, data_store)
+        primary_blob_dir = os.path.join(self.conf.data_dir, 'blobfiles')
+        if not os.path.isdir(primary_blob_dir):
+            os.mkdir(primary_blob_dir)
+        extra_dirs = []
+        try:
+            for d in getattr(self.conf, 'blob_dirs', []) or []:
+                if d and isinstance(d, str):
+                    if not os.path.isdir(d):
+                        os.makedirs(d, exist_ok=True)
+                    extra_dirs.append(d)
+        except Exception as e:
+            log.warning("Invalid blob_dirs in config: %s", e)
+        all_dirs = [primary_blob_dir] + extra_dirs
+        self.blob_manager = BlobManager(self.component_manager.loop, all_dirs, storage, self.conf, data_store)
         return await self.blob_manager.setup()
 
     async def stop(self):
@@ -256,9 +268,31 @@ class DHTComponent(Component):
         return self.dht_node
 
     async def get_status(self):
+        if not self.dht_node:
+            return {
+                'node_id': None,
+                'joined': False,
+                'peers_in_routing_table': 0,
+                'good_peers_recent': 0,
+                'buckets_with_contacts': 0,
+                'external_ip': None,
+                'udp_port': None,
+                'peer_port': None,
+            }
+        protocol = self.dht_node.protocol
+        routing = protocol.routing_table
+        peers = routing.get_peers()
+        peer_manager = protocol.peer_manager
+        good_recent = sum(1 for p in peers if peer_manager.peer_is_good(p) is True)
         return {
-            'node_id': None if not self.dht_node else binascii.hexlify(self.dht_node.protocol.node_id),
-            'peers_in_routing_table': 0 if not self.dht_node else len(self.dht_node.protocol.routing_table.get_peers())
+            'node_id': binascii.hexlify(protocol.node_id),
+            'joined': self.dht_node.joined.is_set(),
+            'peers_in_routing_table': len(peers),
+            'good_peers_recent': good_recent,
+            'buckets_with_contacts': routing.buckets_with_contacts(),
+            'external_ip': protocol.external_ip,
+            'udp_port': protocol.udp_port,
+            'peer_port': protocol.peer_port,
         }
 
     def get_node_id(self):
@@ -282,6 +316,17 @@ class DHTComponent(Component):
             external_ip, _ = await utils.get_external_ip(self.conf.lbryum_servers)
             if not external_ip:
                 log.warning("failed to get external ip")
+
+        # Apply DHT tuning from config, if present
+        try:
+            if hasattr(self.conf, 'dht_alpha') and self.conf.dht_alpha:
+                dht_constants.ALPHA = int(self.conf.dht_alpha)
+            if hasattr(self.conf, 'dht_k') and self.conf.dht_k:
+                dht_constants.K = int(self.conf.dht_k)
+            if hasattr(self.conf, 'dht_iter_delay') and self.conf.dht_iter_delay:
+                dht_constants.ITERATIVE_LOOKUP_DELAY = float(self.conf.dht_iter_delay)
+        except Exception as e:
+            log.warning("Invalid DHT tuning values in config: %s", e)
 
         self.dht_node = Node(
             self.component_manager.loop,
@@ -366,10 +411,15 @@ class FileManagerComponent(Component):
             loop, self.conf, blob_manager, wallet, storage, node,
         )
         if self.component_manager.has_component(LIBTORRENT_COMPONENT):
-            torrent = self.component_manager.get_component(LIBTORRENT_COMPONENT)
-            self.file_manager.source_managers['torrent'] = TorrentManager(
-                loop, self.conf, torrent, storage, self.component_manager.analytics_manager
-            )
+            try:
+                tm_mod = importlib.import_module('lbry.torrent.torrent_manager')
+                TorrentManager = getattr(tm_mod, 'TorrentManager')
+                torrent = self.component_manager.get_component(LIBTORRENT_COMPONENT)
+                self.file_manager.source_managers['torrent'] = TorrentManager(
+                    loop, self.conf, torrent, storage, self.component_manager.analytics_manager
+                )
+            except Exception as err:  # pylint: disable=broad-except
+                log.warning("Torrent support not available, skipping torrent manager: %s", err)
         await self.file_manager.start()
         log.info('Done setting up file manager')
 
@@ -484,7 +534,7 @@ class TorrentComponent(Component):
         self.torrent_session = None
 
     @property
-    def component(self) -> typing.Optional[TorrentSession]:
+    def component(self) -> typing.Optional[typing.Any]:
         return self.torrent_session
 
     async def get_status(self):
@@ -495,6 +545,12 @@ class TorrentComponent(Component):
         }
 
     async def start(self):
+        try:
+            ts_mod = importlib.import_module('lbry.torrent.session')
+            TorrentSession = getattr(ts_mod, 'TorrentSession')
+        except Exception as err:  # pylint: disable=broad-except
+            log.warning("Torrent support not available, skipping libtorrent component: %s", err)
+            return
         self.torrent_session = TorrentSession(asyncio.get_event_loop(), None)
         await self.torrent_session.bind()  # TODO: specify host/port
 
@@ -702,6 +758,44 @@ class ExchangeRateManagerComponent(Component):
 
     async def stop(self):
         self.exchange_rate_manager.stop()
+
+
+class LANDiscoveryComponent(Component):
+    component_name = LAN_DISCOVERY_COMPONENT
+    depends_on = [DHT_COMPONENT]
+
+    def __init__(self, component_manager):
+        super().__init__(component_manager)
+        self._lan: typing.Optional[LANDiscovery] = None
+
+    @property
+    def component(self) -> typing.Optional[LANDiscovery]:
+        return self._lan
+
+    async def get_status(self):
+        if not self._lan:
+            return {'enabled': False}
+        return {
+            'enabled': True,
+            'group': self._lan.group,
+            'port': self._lan.port,
+            'interval': self._lan.interval,
+            'sent': self._lan.sent_count,
+            'received': self._lan.recv_count,
+            'known_peers': len(self._lan.known_peers),
+        }
+
+    async def start(self):
+        if not self.conf.lan_discovery:
+            return
+        dht_node = self.component_manager.get_component(DHT_COMPONENT)
+        self._lan = LANDiscovery(self.component_manager.loop, dht_node, self.conf)
+        await self._lan.start()
+
+    async def stop(self):
+        if self._lan:
+            await self._lan.stop()
+            self._lan = None
 
 
 class TrackerAnnouncerComponent(Component):

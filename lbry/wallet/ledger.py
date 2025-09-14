@@ -891,6 +891,46 @@ class Ledger(metaclass=LedgerRegistry):
             result[url] = txo
         return result
 
+    async def resolve_with_hub_cycle(self, accounts, urls, **kwargs):
+        """
+        Resolve URLs on the current hub; for unresolved items (NOT_FOUND), try other known hubs until resolved or exhausted.
+        """
+        initial = await self.resolve(accounts, urls, **kwargs)
+        unresolved = []
+        for url, val in initial.items():
+            if not val or (isinstance(val, dict) and 'error' in val):
+                err = val.get('error', {}) if isinstance(val, dict) else {}
+                if not err or err.get('name') in (NOT_FOUND,):
+                    unresolved.append(url)
+        if not unresolved:
+            return initial
+        candidates = self.network.get_candidate_servers()
+        current = self.network.client.server if self.network.client else None
+        servers = [s for s in candidates if s != current]
+        pending = set(unresolved)
+        for server in servers:
+            if not pending:
+                break
+            batch = list(pending)[:100]
+            try:
+                inflated = await self._inflate_outputs(
+                    self.network.resolve_on_server(server, batch), accounts, **kwargs
+                )
+            except Exception:
+                continue
+            txos = inflated[0]
+            for url, txo in zip(batch, txos):
+                if url not in pending:
+                    continue
+                if txo:
+                    if isinstance(txo, Output) and URL.parse(url).has_stream_in_channel:
+                        if not txo.channel or not txo.is_signed_by(txo.channel, self):
+                            txo = {'error': {'name': INVALID, 'text': f'{url} has invalid channel signature'}}
+                    initial[url] = txo
+                    if not (isinstance(initial[url], dict) and 'error' in initial[url]):
+                        pending.remove(url)
+        return initial
+
     async def sum_supports(self, new_sdk_server, **kwargs) -> List[Dict]:
         return await self.network.sum_supports(new_sdk_server, **kwargs)
 
@@ -991,7 +1031,47 @@ class Ledger(metaclass=LedgerRegistry):
                 if isinstance(resolved, dict) and 'error' in resolved:
                     txo.meta['error'] = resolved['error']
                 results.append(txo)
-        return results
+        return result
+
+    async def resolve_with_hub_cycle(self, accounts, urls, **kwargs):
+        """
+        Resolve URLs on the current hub; for unresolved items (NOT_FOUND), try other known hubs until resolved or exhausted.
+        """
+        initial = await self.resolve(accounts, urls, **kwargs)
+        unresolved = []
+        for url, val in initial.items():
+            if not val or (isinstance(val, dict) and 'error' in val):
+                err = val.get('error', {}) if isinstance(val, dict) else {}
+                if not err or err.get('name') in (NOT_FOUND,):
+                    unresolved.append(url)
+        if not unresolved:
+            return initial
+        candidates = self.network.get_candidate_servers()
+        current = self.network.client.server if self.network.client else None
+        servers = [s for s in candidates if s != current]
+        pending = set(unresolved)
+        for server in servers:
+            if not pending:
+                break
+            batch = list(pending)[:100]
+            try:
+                inflated = await self._inflate_outputs(
+                    self.network.resolve_on_server(server, batch), accounts, **kwargs
+                )
+            except Exception:
+                continue
+            txos = inflated[0]
+            for url, txo in zip(batch, txos):
+                if url not in pending:
+                    continue
+                if txo:
+                    if isinstance(txo, Output) and URL.parse(url).has_stream_in_channel:
+                        if not txo.channel or not txo.is_signed_by(txo.channel, self):
+                            txo = {'error': {'name': INVALID, 'text': f'{url} has invalid channel signature'}}
+                    initial[url] = txo
+                    if not (isinstance(initial[url], dict) and 'error' in initial[url]):
+                        pending.remove(url)
+        return initials
 
     async def _resolve_for_local_support_results(self, accounts, txos):
         channel_ids = set()
@@ -1213,6 +1293,46 @@ class Ledger(metaclass=LedgerRegistry):
                 else:
                     result[key] += value
         return result
+
+    async def resolve_with_hub_cycle(self, accounts, urls, **kwargs):
+        """
+        Resolve URLs on the current hub; for unresolved items (NOT_FOUND), try other known hubs until resolved or exhausted.
+        """
+        initial = await self.resolve(accounts, urls, **kwargs)
+        unresolved = []
+        for url, val in initial.items():
+            if not val or (isinstance(val, dict) and 'error' in val):
+                err = val.get('error', {}) if isinstance(val, dict) else {}
+                if not err or err.get('name') in (NOT_FOUND,):
+                    unresolved.append(url)
+        if not unresolved:
+            return initial
+        candidates = self.network.get_candidate_servers()
+        current = self.network.client.server if self.network.client else None
+        servers = [s for s in candidates if s != current]
+        pending = set(unresolved)
+        for server in servers:
+            if not pending:
+                break
+            batch = list(pending)[:100]
+            try:
+                inflated = await self._inflate_outputs(
+                    self.network.resolve_on_server(server, batch), accounts, **kwargs
+                )
+            except Exception:
+                continue
+            txos = inflated[0]
+            for url, txo in zip(batch, txos):
+                if url not in pending:
+                    continue
+                if txo:
+                    if isinstance(txo, Output) and URL.parse(url).has_stream_in_channel:
+                        if not txo.channel or not txo.is_signed_by(txo.channel, self):
+                            txo = {'error': {'name': INVALID, 'text': f'{url} has invalid channel signature'}}
+                    initial[url] = txo
+                    if not (isinstance(initial[url], dict) and 'error' in initial[url]):
+                        pending.remove(url)
+        return initial
 
 
 class TestNetLedger(Ledger):

@@ -29,13 +29,18 @@ setup(
     },
     install_requires=[
         'aiohttp==3.7.4',
+        # Ensure compatibility with optional aiosignal (used by newer aiohttp builds) and PyInstaller
+        'typing_extensions>=4.12.2',
+        # Ensure compatibility if aiosignal is pulled in (aiohttp >=3.8 uses it)
+        'aiosignal>=1.3.1,<2.0.0',
         'aioupnp==0.0.18',
         'appdirs==1.4.3',
         'certifi>=2021.10.08',
         'colorama==0.3.7',
         'distro==1.4.0',
         'base58==1.0.0',
-        'cffi==1.13.2',
+        # Use a modern cffi with prebuilt wheels for Python 3.12+
+        'cffi>=1.15.1,<2.0.0',
         'cryptography==3.4.7',
         'protobuf==3.17.2',
         'prometheus_client==0.7.1',
@@ -46,7 +51,6 @@ setup(
         'coincurve==15.0.0',
         'pbkdf2==1.3',
         'filetype==1.0.9',
-        'libtorrent==2.0.6',
     ],
     extras_require={
         'lint': [
@@ -58,6 +62,9 @@ setup(
         ],
         'hub': [
             'hub@git+https://github.com/lbryio/hub.git@929448d64bcbe6c5e476757ec78456beaa85e56a'
+        ],
+        'torrent': [
+            'libtorrent>=2.0.6,<2.0.12'
         ]
     },
     classifiers=[

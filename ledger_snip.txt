@@ -1,0 +1,121 @@
+    async def resolve(self, accounts, urls, **kwargs):
+        txos = []
+        urls_copy = list(urls)
+        resolve = partial(self.network.retriable_call, self.network.resolve)
+        while urls_copy:
+            batch, urls_copy = urls_copy[:100], urls_copy[100:]
+            txos.extend(
+                (await self._inflate_outputs(
+                    resolve(batch), accounts, **kwargs
+                ))[0]
+            )
+
+        assert len(urls) == len(txos), "Mismatch between urls requested for resolve and responses received."
+        result = {}
+        for url, txo in zip(urls, txos):
+            if txo:
+                if isinstance(txo, Output) and URL.parse(url).has_stream_in_channel:
+                    if not txo.channel or not txo.is_signed_by(txo.channel, self):
+                        txo = {'error': {'name': INVALID, 'text': f'{url} has invalid channel signature'}}
+            else:
+                txo = {'error': {'name': NOT_FOUND, 'text': f'{url} did not resolve to a claim'}}
+            result[url] = txo
+        return result
+
+    async def sum_supports(self, new_sdk_server, **kwargs) -> List[Dict]:
+        return await self.network.sum_supports(new_sdk_server, **kwargs)
+
+    async def claim_search(
+            self, accounts,
+            include_purchase_receipt=False,
+            include_is_my_output=False,
+            **kwargs) -> Tuple[List[Output], dict, int, int]:
+        return await self._inflate_outputs(
+            self.network.claim_search(**kwargs), accounts,
+            include_purchase_receipt=include_purchase_receipt,
+            include_is_my_output=include_is_my_output
+        )
+
+    # async def get_claim_by_claim_id(self, accounts, claim_id, **kwargs) -> Output:
+    #     return await self.network.get_claim_by_id(claim_id)
+
+    async def get_claim_by_claim_id(self, claim_id, accounts=None, include_purchase_receipt=False,
+                                    include_is_my_output=False):
+        accounts = accounts or []
+        # return await self.network.get_claim_by_id(claim_id)
+        inflated = await self._inflate_outputs(
+            self.network.get_claim_by_id(claim_id), accounts,
+            include_purchase_receipt=include_purchase_receipt,
+            include_is_my_output=include_is_my_output,
+        )
+        txos = inflated[0]
+        if txos:
+            return txos[0]
+
+    async def _report_state(self):
+        try:
+            for account in self.accounts:
+                balance = dewies_to_lbc(await account.get_balance(include_claims=True))
+                channel_count = await account.get_channel_count()
+                claim_count = await account.get_claim_count()
+                if isinstance(account.receiving, SingleKey):
+                    log.info("Loaded single key account %s with %s LBC. "
+                             "%d channels, %d certificates and %d claims",
+                             account.id, balance, channel_count, len(account.channel_keys), claim_count)
+                else:
+                    total_receiving = len(await account.receiving.get_addresses())
+                    total_change = len(await account.change.get_addresses())
+                    log.info("Loaded account %s with %s LBC, %d receiving addresses (gap: %d), "
+                             "%d change addresses (gap: %d), %d channels, %d certificates and %d claims. ",
+                             account.id, balance, total_receiving, account.receiving.gap, total_change,
+                             account.change.gap, channel_count, len(account.channel_keys), claim_count)
+        except Exception:
+            log.exception(
+                'Failed to display wallet state, please file issue '
+                'for this bug along with the traceback you see below:')
+
+    async def _reset_balance_cache(self, e: TransactionEvent):
+        account_ids = [
+            r['account'] for r in await self.db.get_addresses(('account',), address=e.address)
+        ]
+        for account_id in account_ids:
+            if account_id in self._balance_cache:
+                del self._balance_cache[account_id]
+
+    @staticmethod
+    def constraint_spending_utxos(constraints):
+        constraints['txo_type__in'] = (0, TXO_TYPES['purchase'])
+
+    async def get_purchases(self, resolve=False, **constraints):
+        purchases = await self.db.get_purchases(**constraints)
+        if resolve:
+            claim_ids = [p.purchased_claim_id for p in purchases]
+            try:
+                resolved, _, _, _ = await self.claim_search([], claim_ids=claim_ids)
+            except Exception:
+                log.exception("Resolve failed while looking up purchased claim ids:")
+                resolved = []
+            lookup = {claim.claim_id: claim for claim in resolved}
+            for purchase in purchases:
+                purchase.purchased_claim = lookup.get(purchase.purchased_claim_id)
+        return purchases
+
+    def get_purchase_count(self, resolve=False, **constraints):
+        return self.db.get_purchase_count(**constraints)
+
+    async def _resolve_for_local_results(self, accounts, txos):
+        txos = await self._resolve_for_local_claim_results(accounts, txos)
+        txos = await self._resolve_for_local_support_results(accounts, txos)
+        return txos
+
+    async def _resolve_for_local_claim_results(self, accounts, txos):
+        results = []
+        response = await self.resolve(
+            accounts, [txo.permanent_url for txo in txos if txo.can_decode_claim]
+        )
+        for txo in txos:
+            resolved = response.get(txo.permanent_url) if txo.can_decode_claim else None
+            if isinstance(resolved, Output):
+                resolved.update_annotations(txo)
+                results.append(resolved)
+            else:

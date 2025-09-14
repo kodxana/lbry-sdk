@@ -324,6 +324,7 @@ class KademliaProtocol(DatagramProtocol):
         self._to_add: typing.Set['KademliaPeer'] = set()
         self._wakeup_routing_task = asyncio.Event()
         self.maintaing_routing_task: typing.Optional[asyncio.Task] = None
+        self._token_rotation_task: typing.Optional[asyncio.Task] = None
 
     @functools.lru_cache(128)
     def get_rpc_peer(self, peer: 'KademliaPeer') -> RemoteKademliaRPC:
@@ -331,10 +332,23 @@ class KademliaProtocol(DatagramProtocol):
 
     def start(self):
         self.maintaing_routing_task = self.loop.create_task(self.routing_table_task())
+        # Periodically rotate the anti-amplification token to reduce replay window
+        async def _rotate():
+            try:
+                while True:
+                    await asyncio.sleep(15 * 60)  # 15 minutes
+                    self.change_token()
+            except asyncio.CancelledError:
+                return
+        if not self._token_rotation_task:
+            self._token_rotation_task = self.loop.create_task(_rotate())
 
     def stop(self):
         if self.maintaing_routing_task:
             self.maintaing_routing_task.cancel()
+        if self._token_rotation_task:
+            self._token_rotation_task.cancel()
+            self._token_rotation_task = None
         if self.transport:
             self.disconnect()
 

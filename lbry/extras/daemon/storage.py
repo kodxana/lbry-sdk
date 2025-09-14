@@ -338,6 +338,12 @@ class SQLiteStorage(SQLiteMixin):
                 unique (address, udp_port)
             );
             create index if not exists blob_data on blob(blob_hash, blob_length, is_mine);
+            create index if not exists support_claim_id_idx on support(claim_id);
+            create index if not exists claim_claim_id_idx on claim(claim_id);
+            create index if not exists content_claim_bt_infohash_idx on content_claim(bt_infohash);
+            create index if not exists blob_next_announce_status_idx on blob(next_announce_time, status);
+            create index if not exists blob_should_announce_idx on blob(should_announce);
+            create index if not exists blob_single_announce_idx on blob(single_announce);
     """
 
     def __init__(self, conf: Config, path, loop=None, time_getter: typing.Optional[typing.Callable[[], float]] = None):
@@ -793,7 +799,15 @@ class SQLiteStorage(SQLiteMixin):
 
         await self.db.run(_save_claims)
         if update_file_callbacks:
-            await asyncio.wait(map(asyncio.create_task, update_file_callbacks))
+            # Bound concurrency for file update callbacks to avoid event-loop spikes
+            limit = getattr(self.conf, 'claim_callback_concurrency', 24)
+            sem = asyncio.Semaphore(limit)
+
+            async def _runner(coro):
+                async with sem:
+                    return await coro
+
+            await asyncio.gather(*(_runner(cb) for cb in update_file_callbacks))
         if claim_id_to_supports:
             await self.save_supports(claim_id_to_supports)
 

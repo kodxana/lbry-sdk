@@ -8,6 +8,8 @@ import asyncio
 import argparse
 import logging
 import logging.handlers
+import datetime
+import json as jsonlib
 
 import aiohttp
 from aiohttp.web import GracefulExit
@@ -234,8 +236,28 @@ def ensure_directory_exists(path: str):
 LOG_MODULES = 'lbry', 'aioupnp'
 
 
+class JSONFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            'ts': datetime.datetime.fromtimestamp(record.created, tz=datetime.timezone.utc).isoformat(),
+            'level': record.levelname,
+            'logger': record.name,
+            'line': record.lineno,
+            'msg': record.getMessage(),
+        }
+        if record.exc_info:
+            payload['exc_info'] = self.formatException(record.exc_info)
+        return jsonlib.dumps(payload, ensure_ascii=False)
+
+
+def _make_formatter(conf: Config) -> logging.Formatter:
+    if getattr(conf, 'log_format', 'text') == 'json':
+        return JSONFormatter()
+    return logging.Formatter("%(asctime)s %(levelname)-8s %(name)s:%(lineno)d: %(message)s")
+
+
 def setup_logging(logger: logging.Logger, args: argparse.Namespace, conf: Config):
-    default_formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(name)s:%(lineno)d: %(message)s")
+    default_formatter = _make_formatter(conf)
     file_handler = logging.handlers.RotatingFileHandler(conf.log_file_path, maxBytes=2097152, backupCount=5)
     file_handler.setFormatter(default_formatter)
     for module_name in LOG_MODULES:
@@ -249,6 +271,8 @@ def setup_logging(logger: logging.Logger, args: argparse.Namespace, conf: Config
     logger.getChild('lbry').setLevel(logging.INFO)
     logger.getChild('aioupnp').setLevel(logging.WARNING)
     logger.getChild('aiohttp').setLevel(logging.CRITICAL)
+    if getattr(conf, 'quiet_wallet_sync', True):
+        logger.getChild('lbry.wallet.ledger').setLevel(logging.WARNING)
 
     if args.verbose is not None:
         if len(args.verbose) > 0:

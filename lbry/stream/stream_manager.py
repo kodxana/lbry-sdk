@@ -43,6 +43,10 @@ class StreamManager(SourceManager):
         'is_fully_reflected'
     })
 
+    # Internal concurrency caps for startup and resume operations (overridden by config if present)
+    DEFAULT_LOAD_CONCURRENCY = 24
+    DEFAULT_SAVE_CONCURRENCY = 8
+
     def __init__(self, loop: asyncio.AbstractEventLoop, config: 'Config', blob_manager: 'BlobManager',
                  wallet_manager: 'WalletManager', storage: 'SQLiteStorage', node: Optional['Node'],
                  analytics_manager: Optional['AnalyticsManager'] = None):
@@ -55,6 +59,18 @@ class StreamManager(SourceManager):
         self.update_stream_finished_futs: typing.List[asyncio.Future] = []
         self.running_reflector_uploads: typing.Dict[str, asyncio.Task] = {}
         self.started = asyncio.Event()
+
+    async def _gather_limited(self, coros: typing.Iterable[typing.Awaitable], limit: int):
+        sem = asyncio.Semaphore(limit)
+
+        async def _runner(coro):
+            async with sem:
+                return await coro
+
+        tasks = [self.loop.create_task(_runner(c)) for c in coros]
+        if tasks:
+            return await asyncio.gather(*tasks)
+        return []
 
     @property
     def streams(self):
@@ -137,28 +153,31 @@ class StreamManager(SourceManager):
 
         log.info("Initializing %i files", len(to_start))
         to_resume_saving = []
-        add_stream_tasks = []
+        load_coros = []
         for file_info in to_start:
             file_name = path_or_none(file_info['file_name'])
             download_directory = path_or_none(file_info['download_directory'])
             if file_name and download_directory and not file_info['saved_file'] and file_info['status'] == 'running':
                 to_resume_saving.append((file_name, download_directory, file_info['sd_hash']))
-            add_stream_tasks.append(self.loop.create_task(self._load_stream(
+            load_coros.append(self._load_stream(
                 file_info['rowid'], file_info['sd_hash'], file_name,
                 download_directory, file_info['status'],
                 file_info['claim'], file_info['content_fee'],
                 file_info['added_on'], file_info['fully_reflected']
-            )))
-        if add_stream_tasks:
-            await asyncio.gather(*add_stream_tasks)
+            ))
+        if load_coros:
+            limit = getattr(self.config, 'stream_load_concurrency', self.DEFAULT_LOAD_CONCURRENCY)
+            await self._gather_limited(load_coros, limit)
         log.info("Started stream manager with %i files", len(self._sources))
         if not self.node:
             log.info("no DHT node given, resuming downloads trusting that we can contact reflector")
         if to_resume_saving:
             log.info("Resuming saving %i files", len(to_resume_saving))
-            self.resume_saving_task = asyncio.ensure_future(asyncio.gather(
-                *(self._sources[sd_hash].save_file(file_name, download_directory)
-                  for (file_name, download_directory, sd_hash) in to_resume_saving),
+            save_limit = getattr(self.config, 'stream_save_concurrency', self.DEFAULT_SAVE_CONCURRENCY)
+            self.resume_saving_task = asyncio.ensure_future(self._gather_limited(
+                (self._sources[sd_hash].save_file(file_name, download_directory)
+                 for (file_name, download_directory, sd_hash) in to_resume_saving),
+                save_limit
             ))
 
     async def reflect_streams(self):

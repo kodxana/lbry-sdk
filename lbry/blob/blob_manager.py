@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 
 class BlobManager:
-    def __init__(self, loop: asyncio.AbstractEventLoop, blob_dir: str, storage: 'SQLiteStorage', config: 'Config',
+    def __init__(self, loop: asyncio.AbstractEventLoop, blob_dir: typing.Union[str, typing.List[str]], storage: 'SQLiteStorage', config: 'Config',
                  node_data_store: typing.Optional['DictDataStore'] = None):
         """
         This class stores blobs on the hard disk
@@ -25,7 +25,13 @@ class BlobManager:
         storage - SQLiteStorage object
         """
         self.loop = loop
-        self.blob_dir = blob_dir
+        # Support multiple blob directories; keep first as primary for legacy paths (sd blobs, etc.)
+        if isinstance(blob_dir, list):
+            self.blob_dirs = [d for d in blob_dir if d]
+            self.blob_dir = self.blob_dirs[0] if self.blob_dirs else ''
+        else:
+            self.blob_dirs = [blob_dir]
+            self.blob_dir = blob_dir
         self.storage = storage
         self._node_data_store = node_data_store
         self.completed_blob_hashes: typing.Set[str] = set() if not self._node_data_store\
@@ -36,11 +42,28 @@ class BlobManager:
             self.config.blob_lru_cache_size)
         self.connection_manager = ConnectionManager(loop)
 
+    def _choose_dir_for_new(self, blob_hash: str) -> str:
+        # deterministic spread across dirs: hash modulo count
+        if not self.blob_dirs:
+            return self.blob_dir
+        try:
+            idx = int(blob_hash[:8], 16) % len(self.blob_dirs)
+            return self.blob_dirs[idx]
+        except Exception:
+            return self.blob_dirs[0]
+
+    def _find_existing_dir(self, blob_hash: str) -> typing.Optional[str]:
+        for d in self.blob_dirs:
+            if os.path.isfile(os.path.join(d, blob_hash)):
+                return d
+        return None
+
     def _get_blob(self, blob_hash: str, length: typing.Optional[int] = None, is_mine: bool = False):
-        if self.config.save_blobs or (
-                is_valid_blobhash(blob_hash) and os.path.isfile(os.path.join(self.blob_dir, blob_hash))):
+        existing_dir = self._find_existing_dir(blob_hash)
+        if self.config.save_blobs or existing_dir:
+            target_dir = existing_dir or self._choose_dir_for_new(blob_hash)
             return BlobFile(
-                self.loop, blob_hash, length, self.blob_completed, self.blob_dir, is_mine=is_mine
+                self.loop, blob_hash, length, self.blob_completed, target_dir, is_mine=is_mine
             )
         return BlobBuffer(
             self.loop, blob_hash, length, self.blob_completed, self.blob_dir, is_mine=is_mine
@@ -65,7 +88,7 @@ class BlobManager:
     def is_blob_verified(self, blob_hash: str, length: typing.Optional[int] = None) -> bool:
         if not is_valid_blobhash(blob_hash):
             raise ValueError(blob_hash)
-        if not os.path.isfile(os.path.join(self.blob_dir, blob_hash)):
+        if not any(os.path.isfile(os.path.join(d, blob_hash)) for d in self.blob_dirs):
             return False
         if blob_hash in self.blobs:
             return self.blobs[blob_hash].get_is_verified()
@@ -73,11 +96,17 @@ class BlobManager:
 
     async def setup(self) -> bool:
         def get_files_in_blob_dir() -> typing.Set[str]:
-            if not self.blob_dir:
-                return set()
-            return {
-                item.name for item in os.scandir(self.blob_dir) if is_valid_blobhash(item.name)
-            }
+            names: typing.Set[str] = set()
+            for d in self.blob_dirs:
+                if not d:
+                    continue
+                try:
+                    for item in os.scandir(d):
+                        if is_valid_blobhash(item.name):
+                            names.add(item.name)
+                except OSError:
+                    continue
+            return names
 
         in_blobfiles_dir = await self.loop.run_in_executor(None, get_files_in_blob_dir)
         to_add = await self.storage.sync_missing_blobs(in_blobfiles_dir)
@@ -133,8 +162,18 @@ class BlobManager:
             raise Exception("invalid blob hash to delete")
 
         if blob_hash not in self.blobs:
-            if self.blob_dir and os.path.isfile(os.path.join(self.blob_dir, blob_hash)):
-                os.remove(os.path.join(self.blob_dir, blob_hash))
+            removed = False
+            for d in self.blob_dirs:
+                f = os.path.join(d, blob_hash)
+                if os.path.isfile(f):
+                    try:
+                        os.remove(f)
+                        removed = True
+                        break
+                    except OSError:
+                        pass
+            if not removed:
+                return
         else:
             self.blobs.pop(blob_hash).delete()
             if blob_hash in self.completed_blob_hashes:
