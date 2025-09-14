@@ -476,6 +476,32 @@ class Network:
     def claim_search(self, session_override=None, **kwargs):
         return self.rpc('blockchain.claimtrie.search', kwargs, False, session_override)
 
+    # --- Hub cycling helpers ---
+    async def open_temp_session(self, server: Tuple[str, int], timeout: float = 6.0) -> ClientSession:
+        session = ClientSession(network=self, server=server, timeout=int(self.client.timeout) if self.client else 30,
+                                concurrency=32)
+        await session.create_connection(timeout=timeout)
+        await session.ensure_server_version(timeout=timeout)
+        return session
+
+    def get_candidate_servers(self) -> Dict[Tuple[str, int], dict]:
+        # Prefer explicit servers, then known hubs, then default
+        if self.config.get('explicit_servers', []):
+            hubs = self.config['explicit_servers']
+        elif self.known_hubs:
+            hubs = list(self.known_hubs.hubs.keys())
+        else:
+            hubs = self.config['default_servers']
+        # Normalize to list of tuples
+        return [(h[0], h[1]) for h in hubs]
+
+    async def resolve_on_server(self, server: Tuple[str, int], urls):
+        session = await self.open_temp_session(server)
+        try:
+            return await self.resolve(urls, session_override=session)
+        finally:
+            await session.close()
+
     async def sum_supports(self, server, **kwargs):
         message = {"method": "support_sum", "params": kwargs}
         async with self.aiohttp_session.post(server, json=message) as r:
