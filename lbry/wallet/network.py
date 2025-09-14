@@ -5,7 +5,7 @@ import socket
 import random
 from time import perf_counter
 from collections import defaultdict
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 import aiohttp
 
 from lbry import __version__
@@ -484,7 +484,7 @@ class Network:
         await session.ensure_server_version(timeout=timeout)
         return session
 
-    def get_candidate_servers(self) -> Dict[Tuple[str, int], dict]:
+    def get_candidate_servers(self) -> List[Tuple[str, int]]:
         # Prefer explicit servers, then known hubs, then default
         if self.config.get('explicit_servers', []):
             hubs = self.config['explicit_servers']

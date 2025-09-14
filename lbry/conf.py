@@ -650,6 +650,9 @@ class Config(CLIConfig):
         "LRU cache size for decrypted downloaded blobs used to minimize re-downloading the same blobs when "
         "replying to a range request. Set to 0 to disable.", 32
     )
+    pin_on_save_file = Toggle(
+        "Automatically pin (protect) blobs for files marked as saved, preventing cleanup.", True
+    )
     announce_head_and_sd_only = Toggle(
         "Announce only the descriptor and first (rather than all) data blob for a stream to the DHT", True,
         previous_names=['announce_head_blobs_only']
@@ -671,6 +674,15 @@ class Config(CLIConfig):
         "Maximum concurrent blob downloads per stream when prefetching.", 2
     )
     concurrent_hub_requests = Integer("Maximum number of concurrent hub requests", 32)
+    cycle_hubs_on_not_found = Toggle(
+        "When a resolve returns NOT_FOUND on the current wallet server, try other known hubs.", False
+    )
+    cycle_hubs_on_blocked = Toggle(
+        "Also try other known hubs when a resolve result is BLOCKED on the current hub.", False
+    )
+    max_hub_cycles = Integer(
+        "Maximum number of alternate hubs to try for resolve cycling (0 or negative means no limit).", 3
+    )
     fixed_peer_delay = Float(
         "Amount of seconds before adding the reflector servers as potential peers to download from in case dht"
         "peers are not found or are slow", 2.0

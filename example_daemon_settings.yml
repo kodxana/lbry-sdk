@@ -29,3 +29,10 @@ use_upnp: true
 #  - blob_server
 #  - dht
 #  - libtorrent_component   # torrent support is optional/incomplete; skip by default
+
+# Wallet server (hub) behavior
+# hub_timeout: 30                  # seconds to wait for a hub request
+# concurrent_hub_requests: 32      # max concurrent JSON-RPC calls to hub
+# cycle_hubs_on_not_found: true    # try other hubs if resolve returns NOT_FOUND
+# cycle_hubs_on_blocked: false     # also cycle hubs if resolve returns BLOCKED
+# max_hub_cycles: 3                # limit number of alternate hubs to try (0 = no limit)

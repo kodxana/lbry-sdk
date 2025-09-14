@@ -505,6 +505,38 @@ class SQLiteStorage(SQLiteMixin):
             ") OR blob_hash = ?", (is_mine, sd_hash, sd_hash)
         )
 
+    # --- Helpers for storage inventory / pins ---
+    async def list_stream_hashes(self):
+        return await self.run_and_return_list("select stream_hash from stream")
+
+    async def get_saved_status_map(self):
+        rows = await self.db.execute_fetchall("select stream_hash, saved_file from file")
+        return {stream_hash: bool(saved) for stream_hash, saved in rows}
+
+    async def is_stream_pinned(self, stream_hash: str) -> bool:
+        row = await self.db.execute_fetchone(
+            "select 1 from blob b inner join stream_blob s on b.blob_hash=s.blob_hash "
+            "where s.stream_hash=? and b.is_mine=1 limit 1",
+            (stream_hash,)
+        )
+        return bool(row)
+
+    async def get_stream_hash_by_claim_id(self, claim_id: str):
+        return await self.run_and_return_one_or_none(
+            "select stream_hash from content_claim join claim using (claim_outpoint) where claim_id=?",
+            claim_id
+        )
+
+    async def get_stream_hash_for_sd_hash(self, sd_hash: str):
+        return await self.run_and_return_one_or_none(
+            "select stream_hash from stream where sd_hash=?", sd_hash
+        )
+
+    async def list_pinned_streams(self):
+        return await self.run_and_return_list(
+            "select distinct s.stream_hash from blob b join stream_blob s on b.blob_hash=s.blob_hash where b.is_mine=1"
+        )
+
     def sync_missing_blobs(self, blob_files: typing.Set[str]) -> typing.Awaitable[typing.Set[str]]:
         def _sync_blobs(transaction: sqlite3.Connection) -> typing.Set[str]:
             finished_blob_hashes = tuple(
@@ -663,14 +695,24 @@ class SQLiteStorage(SQLiteMixin):
         ))
 
     async def set_saved_file(self, stream_hash: str):
-        return await self.db.execute_fetchall("update file set saved_file=1 where stream_hash=?", (
+        result = await self.db.execute_fetchall("update file set saved_file=1 where stream_hash=?", (
             stream_hash,
         ))
+        if getattr(self.conf, 'pin_on_save_file', False):
+            sd_hash = await self.get_sd_blob_hash_for_stream(stream_hash)
+            if sd_hash:
+                await self.update_blob_ownership(sd_hash, True)
+        return result
 
     async def clear_saved_file(self, stream_hash: str):
-        return await self.db.execute_fetchall("update file set saved_file=0 where stream_hash=?", (
+        result = await self.db.execute_fetchall("update file set saved_file=0 where stream_hash=?", (
             stream_hash,
         ))
+        if getattr(self.conf, 'pin_on_save_file', False):
+            sd_hash = await self.get_sd_blob_hash_for_stream(stream_hash)
+            if sd_hash:
+                await self.update_blob_ownership(sd_hash, False)
+        return result
 
     async def recover_streams(self, descriptors_and_sds: typing.List[typing.Tuple['StreamDescriptor', 'BlobFile',
                                                                                   typing.Optional[Transaction]]],

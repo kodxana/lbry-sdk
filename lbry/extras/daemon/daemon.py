@@ -1011,11 +1011,17 @@ class Daemon(metaclass=JSONRPCServerType):
                     [--include_sent_tips]
                     [--include_received_tips]
                     [--new_sdk_server=<new_sdk_server>]
+                    [--cycle_hubs]
+                    [--cycle_on_blocked]
+                    [--max_hub_cycles=<n>]
 
         Options:
             --urls=<urls>              : (str, list) one or more urls to resolve
-            --wallet_id=<wallet_id>    : (str) wallet to check for claim purchase receipts
+           --wallet_id=<wallet_id>    : (str) wallet to check for claim purchase receipts
            --new_sdk_server=<new_sdk_server> : (str) URL of the new SDK server (EXPERIMENTAL)
+           --cycle_hubs               : (bool) try alternate wallet servers for NOT_FOUND results
+           --cycle_on_blocked         : (bool) also retry on BLOCKED results (censored on a hub)
+           --max_hub_cycles=<n>       : (int) limit the number of alternate hubs to try
            --include_purchase_receipt  : (bool) lookup and include a receipt if this wallet
                                                 has purchased the claim being resolved
             --include_is_my_output     : (bool) lookup and include a boolean indicating
@@ -4909,6 +4915,219 @@ class Daemon(metaclass=JSONRPCServerType):
     Blob management.
     """
 
+    STORAGE_DOC = """
+    Storage inventory and pinning.
+
+    Commands:
+      - inventory: Summarize storage usage and per-claim details.
+      - map: Show blobs for a specific claim/stream.
+      - pin: Protect a claim's blobs from cleanup.
+      - unpin: Remove protection so cleanup can evict.
+      - pins: List pinned claims.
+    """
+
+    @requires(DATABASE_COMPONENT)
+    async def jsonrpc_storage_inventory(self, sort: str = 'size', limit: int = 0):
+        """
+        Summarize storage usage and per-claim details.
+
+        Usage:
+            storage_inventory [--sort=<sort>] [--limit=<n>]
+
+        Options:
+            --sort=<sort> : (str) one of: size | blobs | missing (default: size)
+            --limit=<n>   : (int) limit number of claim entries returned (0 = all)
+
+        Returns:
+            {
+              'totals': { 'network_storage': intMB, 'content_storage': intMB, 'private_storage': intMB, 'total': intMB },
+              'claims': [ { 'claim_id': str, 'name': str, 'url': str,
+                            'sd_hash': str, 'stream_hash': str, 'saved_file': bool, 'pinned': bool,
+                            'blobs_present': int, 'blobs_total': int, 'size_mb': int, 'last_added_on': int } ]
+            }
+        """
+        storage = self.storage
+        totals = await storage.get_stored_blob_disk_usage()
+        streams = await storage.list_stream_hashes()
+        saved_map = await storage.get_saved_status_map()
+        entries = []
+        for stream_hash in streams:
+            blobs = await storage.get_blobs_for_stream(stream_hash, only_completed=False)
+            present = [b for b in blobs if getattr(b, 'length', 0) and b.length > 0]
+            size_mb = int(sum(b.length for b in present) / (1024*1024)) if present else 0
+            last_added = max((b.added_on for b in present), default=0)
+            sd_hash = await storage.get_sd_blob_hash_for_stream(stream_hash)
+            claim = await storage.get_content_claim(stream_hash, include_supports=False)
+            name = claim.get('claim_name') if claim else None
+            claim_id = claim.get('claim_id') if claim else None
+            url = f"lbry://{name}#{claim_id}" if (name and claim_id) else None
+            pinned = await storage.is_stream_pinned(stream_hash)
+            entries.append({
+                'claim_id': claim_id,
+                'name': name,
+                'url': url,
+                'sd_hash': sd_hash,
+                'stream_hash': stream_hash,
+                'saved_file': bool(saved_map.get(stream_hash, 0)),
+                'pinned': pinned,
+                'blobs_present': len(present),
+                'blobs_total': len(blobs),
+                'size_mb': size_mb,
+                'last_added_on': last_added,
+            })
+
+        key = {'size': 'size_mb', 'blobs': 'blobs_present', 'missing': None}.get(sort, 'size_mb')
+        if key:
+            entries.sort(key=lambda e: e.get(key, 0), reverse=True)
+        elif sort == 'missing':
+            entries.sort(key=lambda e: (e['blobs_total'] - e['blobs_present']), reverse=True)
+        if limit and limit > 0:
+            entries = entries[:limit]
+
+        to_mb = lambda x: int(x/1024/1024)
+        result = {
+            'totals': {
+                'network_storage': to_mb(totals['network_storage']),
+                'content_storage': to_mb(totals['content_storage']),
+                'private_storage': to_mb(totals['private_storage']),
+                'total': to_mb(totals['total']),
+            },
+            'claims': entries
+        }
+        return result
+
+    async def _locate_stream_hash(self, url=None, claim_id=None, sd_hash=None):
+        storage = self.storage
+        if sd_hash:
+            return await storage.get_stream_hash_for_sd_hash(sd_hash)
+        if claim_id:
+            return await storage.get_stream_hash_by_claim_id(claim_id)
+        if url:
+            resolved = await self.resolve([], [url])
+            item = resolved.get(url)
+            if isinstance(item, Output):
+                return await storage.get_stream_hash_by_claim_id(item.claim_id)
+        return None
+
+    @requires(DATABASE_COMPONENT)
+    async def jsonrpc_storage_map(self, url=None, claim_id=None, sd_hash=None):
+        """
+        Show blobs for a specific claim/stream.
+
+        Usage:
+            storage_map [--url=<url> | --claim_id=<claim_id> | --sd_hash=<sd_hash>]
+
+        Returns:
+            {
+              'claim': { 'claim_id': str, 'name': str, 'url': str },
+              'sd_hash': str,
+              'stream_hash': str,
+              'pinned': bool,
+              'saved_file': bool,
+              'blobs': [ { 'position': int, 'blob_hash': str, 'length': int, 'present': bool, 'added_on': int } ],
+              'blobs_present': int,
+              'blobs_total': int,
+              'size_mb': int
+            }
+        """
+        stream_hash = await self._locate_stream_hash(url, claim_id, sd_hash)
+        if not stream_hash:
+            return {'error': 'stream not found for provided identifier'}
+        storage = self.storage
+        sd_hash = await storage.get_sd_blob_hash_for_stream(stream_hash)
+        blobs = await storage.get_blobs_for_stream(stream_hash, only_completed=False)
+        blob_list = []
+        present = 0
+        total_size = 0
+        for b in blobs:
+            length = getattr(b, 'length', 0) or 0
+            is_present = length > 0
+            present += 1 if is_present else 0
+            total_size += length if is_present else 0
+            blob_list.append({
+                'position': b.position,
+                'blob_hash': b.blob_hash,
+                'length': length,
+                'present': is_present,
+                'added_on': b.added_on,
+            })
+        claim = await storage.get_content_claim(stream_hash, include_supports=False)
+        name = claim.get('claim_name') if claim else None
+        cid = claim.get('claim_id') if claim else None
+        url_str = f"lbry://{name}#{cid}" if (name and cid) else None
+        saved_map = await storage.get_saved_status_map()
+        pinned = await storage.is_stream_pinned(stream_hash)
+        return {
+            'claim': {'claim_id': cid, 'name': name, 'url': url_str},
+            'sd_hash': sd_hash,
+            'stream_hash': stream_hash,
+            'pinned': pinned,
+            'saved_file': bool(saved_map.get(stream_hash, 0)),
+            'blobs': blob_list,
+            'blobs_present': present,
+            'blobs_total': len(blobs),
+            'size_mb': int(total_size/1024/1024)
+        }
+
+    @requires(DATABASE_COMPONENT)
+    async def jsonrpc_storage_pin(self, url=None, claim_id=None, sd_hash=None):
+        """
+        Pin (protect) blobs for a claim/stream (prevents cleanup).
+
+        Usage:
+            storage_pin [--url=<url> | --claim_id=<claim_id> | --sd_hash=<sd_hash>]
+        """
+        storage = self.storage
+        if not sd_hash:
+            stream_hash = await self._locate_stream_hash(url, claim_id, sd_hash)
+            if not stream_hash:
+                return {'error': 'stream not found for provided identifier'}
+            sd_hash = await storage.get_sd_blob_hash_for_stream(stream_hash)
+        await storage.update_blob_ownership(sd_hash, True)
+        return {'pinned': True, 'sd_hash': sd_hash}
+
+    @requires(DATABASE_COMPONENT)
+    async def jsonrpc_storage_unpin(self, url=None, claim_id=None, sd_hash=None):
+        """
+        Unpin blobs for a claim/stream (cleanup may remove non-saved blobs).
+
+        Usage:
+            storage_unpin [--url=<url> | --claim_id=<claim_id> | --sd_hash=<sd_hash>]
+        """
+        storage = self.storage
+        if not sd_hash:
+            stream_hash = await self._locate_stream_hash(url, claim_id, sd_hash)
+            if not stream_hash:
+                return {'error': 'stream not found for provided identifier'}
+            sd_hash = await storage.get_sd_blob_hash_for_stream(stream_hash)
+        await storage.update_blob_ownership(sd_hash, False)
+        return {'pinned': False, 'sd_hash': sd_hash}
+
+    @requires(DATABASE_COMPONENT)
+    async def jsonrpc_storage_pins(self):
+        """
+        List pinned claims.
+
+        Usage:
+            storage_pins
+        """
+        storage = self.storage
+        pinned_streams = await storage.list_pinned_streams()
+        saved_map = await storage.get_saved_status_map()
+        out = []
+        for stream_hash in pinned_streams:
+            claim = await storage.get_content_claim(stream_hash, include_supports=False)
+            name = claim.get('claim_name') if claim else None
+            cid = claim.get('claim_id') if claim else None
+            url = f"lbry://{name}#{cid}" if (name and cid) else None
+            sd_hash = await storage.get_sd_blob_hash_for_stream(stream_hash)
+            blobs = await storage.get_blobs_for_stream(stream_hash, only_completed=False)
+            size_mb = int(sum((getattr(b, 'length', 0) or 0) for b in blobs) / 1024/1024)
+            out.append({'claim_id': cid, 'name': name, 'url': url, 'sd_hash': sd_hash,
+                        'stream_hash': stream_hash, 'saved_file': bool(saved_map.get(stream_hash, 0)),
+                        'size_mb': size_mb})
+        return out
+
     @requires(WALLET_COMPONENT, DHT_COMPONENT, BLOB_COMPONENT)
     async def jsonrpc_blob_get(self, blob_hash, timeout=None, read=False):
         """
@@ -5252,6 +5471,125 @@ class Daemon(metaclass=JSONRPCServerType):
         result['node_id'] = hexlify(self.dht_node.protocol.node_id).decode()
         return result
 
+    DHT_DOC = """
+    DHT operations and diagnostics.
+
+    Commands:
+      - counts: Show basic DHT health/capacity counters.
+    """
+
+    @requires(DHT_COMPONENT)
+    def jsonrpc_dht_counts(self):
+        """
+        Get basic DHT counters (routing, peers, storage).
+
+        Usage:
+            dht_counts
+
+        Options:
+            None
+
+        Returns:
+            (dict)
+            {
+              'buckets': (int) number of populated routing-table buckets,
+              'good_peers_recent': (int) peers that are currently considered good,
+              'peers': (int) total peers in routing table,
+              'stored_blobs': (int) number of blob announcements stored
+            }
+        """
+        rt = self.dht_node.protocol.routing_table
+        peers = rt.get_peers()
+        pm = self.dht_node.protocol.peer_manager
+        good = 0
+        for p in peers:
+            try:
+                if pm.peer_is_good(p) is True:
+                    good += 1
+            except Exception:
+                # best-effort; skip malformed entries
+                continue
+        return {
+            'buckets': rt.buckets_with_contacts(),
+            'good_peers_recent': good,
+            'peers': len(peers),
+            'stored_blobs': len(list(self.dht_node.stored_blob_hashes)),
+        }
+
+    @requires(DHT_COMPONENT)
+    async def jsonrpc_dht_walk(self, targets: int = 8, max_results: int = 32, await_seconds: float = 0.0):
+        """
+        Actively walk the DHT to discover additional peers.
+
+        Usage:
+            dht_walk [--targets=<n>] [--max_results=<n>] [--await_seconds=<s>]
+
+        Options:
+            --targets=<n>        : (int) number of target IDs to probe (default 8)
+            --max_results=<n>    : (int) peers to retrieve per target (default 32)
+            --await_seconds=<s>  : (float) wait this many seconds for pings to update routing table
+
+        Returns:
+            (dict)
+            {
+              'before': (int) peers before the walk,
+              'after': (int) peers after the walk,
+              'discovered': (int) newly added peers,
+              'discovered_endpoints': [(str, int)] sample of new peers,
+              'buckets': (int) populated buckets after the walk
+            }
+        """
+        rt = self.dht_node.protocol.routing_table
+        pm = self.dht_node.protocol.peer_manager
+        before_peers = rt.get_peers()
+        before_set = {(p.address, p.udp_port) for p in before_peers}
+
+        try:
+            targets = max(1, int(targets))
+        except Exception:
+            targets = 8
+        try:
+            max_results = max(1, int(max_results))
+        except Exception:
+            max_results = 32
+        try:
+            await_seconds = max(0.0, float(await_seconds))
+        except Exception:
+            await_seconds = 0.0
+
+        refresh_ids = rt.get_refresh_list(0, True)
+        if refresh_ids:
+            refresh_ids = refresh_ids[:targets]
+        total_peers = []
+        for key in refresh_ids or []:
+            try:
+                peers = await self.dht_node.peer_search(key, count=max_results, max_results=max_results)
+            except Exception:
+                continue
+            total_peers.extend(peers)
+
+        # Ping peers we don't yet consider good to nudge routing table updates
+        to_ping = [peer for peer in set(total_peers) if pm.peer_is_good(peer) is not True]
+        if to_ping:
+            self.dht_node.protocol.ping_queue.enqueue_maybe_ping(*to_ping, delay=0.0)
+
+        if await_seconds > 0:
+            try:
+                await asyncio.sleep(await_seconds)
+            except Exception:
+                pass
+
+        after_peers = rt.get_peers()
+        after_set = {(p.address, p.udp_port) for p in after_peers}
+        new_endpoints = sorted(list(after_set - before_set))
+        return {
+            'before': len(before_set),
+            'after': len(after_set),
+            'discovered': max(0, len(new_endpoints)),
+            'discovered_endpoints': new_endpoints[:50],
+            'buckets': rt.buckets_with_contacts(),
+        }
+
     TRACEMALLOC_DOC = """
     Controls and queries tracemalloc memory tracing tools for troubleshooting.
     """
@@ -5462,7 +5800,40 @@ class Daemon(metaclass=JSONRPCServerType):
             raise ValueError(f"Invalid value for '{argument}': {e.args[0]}")
 
     async def resolve(self, accounts, urls, **kwargs):
-        results = await self.ledger.resolve(accounts, urls, **kwargs)
+        # Support optional hub cycling via flags or config
+        cycle_flag = bool(kwargs.pop('cycle_hubs', False))
+        cycle_on_blocked = bool(kwargs.pop('cycle_on_blocked', False))
+        max_hub_cycles = kwargs.pop('max_hub_cycles', None)
+        if max_hub_cycles is not None:
+            try:
+                max_hub_cycles = int(max_hub_cycles)
+            except Exception:
+                max_hub_cycles = None
+
+        # If not explicitly requested, fall back to config toggles
+        if not cycle_flag:
+            try:
+                cycle_flag = bool(self.conf.cycle_hubs_on_not_found)
+            except Exception:
+                cycle_flag = False
+        if not cycle_on_blocked:
+            try:
+                cycle_on_blocked = bool(self.conf.cycle_hubs_on_blocked)
+            except Exception:
+                cycle_on_blocked = False
+        if max_hub_cycles is None:
+            try:
+                max_hub_cycles = int(self.conf.max_hub_cycles)
+            except Exception:
+                max_hub_cycles = None
+
+        if cycle_flag:
+            results = await self.ledger.resolve_with_hub_cycle(
+                accounts, urls, cycle_on_blocked=cycle_on_blocked,
+                max_hub_cycles=max_hub_cycles, **kwargs
+            )
+        else:
+            results = await self.ledger.resolve(accounts, urls, **kwargs)
         if self.conf.save_resolved_claims and results:
             try:
                 await self.storage.save_claim_from_output(
