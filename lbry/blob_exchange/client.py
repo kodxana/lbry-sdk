@@ -42,8 +42,12 @@ class BlobExchangeClientProtocol(asyncio.Protocol):
             # assert self.peer_address is not None
             self.connection_manager.received_data(f"{self.peer_address}:{self.peer_port}", len(data))
         if not self.transport or self.transport.is_closing():
-            log.warning("transport closing, but got more bytes from %s:%i\n%s", self.peer_address, self.peer_port,
-                        binascii.hexlify(data))
+            shown = min(len(data), 64)
+            preview = binascii.hexlify(data[:shown])
+            log.warning(
+                "transport closing, but got %d extra bytes from %s:%i (showing first %d bytes as hex): %s",
+                len(data), self.peer_address, self.peer_port, shown, preview
+            )
             if self._response_fut and not self._response_fut.done():
                 self._response_fut.cancel()
             return

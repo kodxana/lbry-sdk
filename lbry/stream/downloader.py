@@ -43,7 +43,7 @@ class StreamDownloader:
         self._prefetch_window: int = getattr(self.config, 'stream_prefetch_window', 0) or 0
         self._prefetch_workers: int = getattr(self.config, 'stream_prefetch_workers', 2) or 2
         self._prefetch_sem: typing.Optional[asyncio.Semaphore] = None
-        self._prefetch_tasks: typing.Dict[int, asyncio.Task] = {}
+        self._prefetch_jobs: typing.Dict[int, asyncio.Task] = {}
         self._prefetch_results: typing.Dict[int, bytes] = {}
         self._progress_task: typing.Optional[asyncio.Task] = None
 
@@ -56,6 +56,24 @@ class StreamDownloader:
             )
 
         self.cached_read_blob = cached_read_blob
+        self._cancelled_tasks: typing.Set[asyncio.Task] = set()
+
+    def _drain_task(self, task: typing.Optional[asyncio.Task]):
+        if not task or task.done():
+            return
+
+        async def _await_task(t: asyncio.Task):
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                log.debug("cancelled task raised during shutdown", exc_info=True)
+            finally:
+                self._cancelled_tasks.discard(t)
+
+        self._cancelled_tasks.add(task)
+        self.loop.create_task(_await_task(task))
 
     async def add_fixed_peers(self):
         def _add_fixed_peers(fixed_peers):
@@ -98,42 +116,58 @@ class StreamDownloader:
             self._prefetch_sem = asyncio.Semaphore(max(1, self._prefetch_workers))
 
     def _clear_prefetch(self):
-        for t in list(self._prefetch_tasks.values()):
-            if not t.done():
-                t.cancel()
-        self._prefetch_tasks.clear()
+        for task in list(self._prefetch_jobs.values()):
+            if not task.done():
+                task.cancel()
+                self._drain_task(task)
+        self._prefetch_jobs.clear()
         self._prefetch_results.clear()
 
-    def _schedule_prefetch(self, start_index: int):
+    async def _prefetch_blob(self, index: int, blob_info: 'BlobInfo', *, high_priority: bool):
+        try:
+            if self._prefetch_sem:
+                async with self._prefetch_sem:
+                    await self._execute_prefetch(index, blob_info, high_priority)
+            else:
+                await self._execute_prefetch(index, blob_info, high_priority)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Best effort: failures simply mean the blob will be fetched on-demand later
+            log.debug("prefetch failed for blob %d/%s", index + 1, self.sd_hash[:6], exc_info=True)
+        finally:
+            self._prefetch_jobs.pop(index, None)
+
+    async def _execute_prefetch(self, index: int, blob_info: 'BlobInfo', high_priority: bool):
+        connection_id = (50 if high_priority else 200) + index
+        blob = await asyncio.wait_for(
+            self.blob_downloader.download_blob(blob_info.blob_hash, blob_info.length, connection_id),
+            self.config.blob_download_timeout * 10
+        )
+        self._prefetch_results[index] = self.decrypt_blob(blob_info, blob)
+        log.info(
+            "prefetched blob %d/%d for %s (priority=%s)",
+            index + 1, len(self.descriptor.blobs) - 1, self.sd_hash[:6], "high" if high_priority else "background"
+        )
+
+    def _ensure_prefetch_jobs(self, current_index: int):
         if self._prefetch_window <= 0 or not self.descriptor:
             return
         last_index = len(self.descriptor.blobs) - 2  # exclude the terminator blob
-        end_index = min(last_index, start_index + self._prefetch_window)
-        log.debug("scheduling prefetch for blobs %d..%d (last=%d, inflight=%d)",
-            start_index + 1, end_index, last_index, len(self._prefetch_tasks))
-        for idx in range(start_index + 1, end_index + 1):
-            if idx in self._prefetch_tasks or idx in self._prefetch_results:
+        end_index = min(last_index, current_index + self._prefetch_window)
+        log.debug(
+            "prefetch scheduler for %s: current=%d window=(%d..%d) inflight=%d cached=%d",
+            self.sd_hash[:6], current_index, current_index + 1, end_index,
+            len(self._prefetch_jobs), len(self._prefetch_results)
+        )
+        for idx in range(current_index + 1, end_index + 1):
+            if idx in self._prefetch_results or idx in self._prefetch_jobs:
                 continue
             blob_info = self.descriptor.blobs[idx]
-
-            async def _task(i: int, bi):
-                if not self._prefetch_sem:
-                    return
-                async with self._prefetch_sem:
-                    try:
-                        blob = await asyncio.wait_for(
-                            self.blob_downloader.download_blob(bi.blob_hash, bi.length, connection_id=100 + i),
-                            self.config.blob_download_timeout * 10
-                        )
-                        self._prefetch_results[i] = self.decrypt_blob(bi, blob)
-                        log.info("prefetched blob %d/%d for %s", i + 1, len(self.descriptor.blobs) - 1, self.sd_hash[:6])
-                    except Exception:
-                        # Best-effort: on failure, let the main path fetch it later
-                        pass
-                    finally:
-                        self._prefetch_tasks.pop(i, None)
-
-            self._prefetch_tasks[idx] = self.loop.create_task(_task(idx, blob_info))
+            high_priority = idx == current_index + 1
+            self._prefetch_jobs[idx] = self.loop.create_task(
+                self._prefetch_blob(idx, blob_info, high_priority=high_priority)
+            )
 
     async def start(self, node: typing.Optional['Node'] = None, connection_id: int = 0, save_stream=True):
         # set up peer accumulation
@@ -159,7 +193,7 @@ class StreamDownloader:
             async def _heartbeat():
                 try:
                     while True:
-                        inflight = len(self._prefetch_tasks)
+                        inflight = len(self._prefetch_jobs)
                         cached = len(self._prefetch_results)
                         active = len(self.blob_downloader.active_connections)
                         connections = len(self.blob_downloader.connections)
@@ -180,6 +214,9 @@ class StreamDownloader:
             await self.blob_manager.storage.store_stream(
                 self.blob_manager.get_blob(self.sd_hash, length=self.descriptor.length), self.descriptor
             )
+        if self._prefetch_window > 0 and self.descriptor:
+            # kick off initial prefetch cycle so background peers can help immediately
+            self._ensure_prefetch_jobs(-1)
 
     async def download_stream_blob(self, blob_info: 'BlobInfo', connection_id: int = 0) -> 'AbstractBlob':
         if not filter(lambda b: b.blob_hash == blob_info.blob_hash, self.descriptor.blobs[:-1]):
@@ -210,7 +247,7 @@ class StreamDownloader:
             log.info("downloaded on-demand blob %d/%d for %s", blob_info.blob_num + 1, len(self.descriptor.blobs) - 1, self.sd_hash[:6])
         # Schedule next prefetch cycle
         if self._prefetch_window > 0:
-            self._schedule_prefetch(blob_info.blob_num)
+            self._ensure_prefetch_jobs(blob_info.blob_num)
         if start:
             self.time_to_first_bytes = self.loop.time() - start
         return decrypted
@@ -218,6 +255,7 @@ class StreamDownloader:
     def stop(self):
         if self.accumulate_task:
             self.accumulate_task.cancel()
+            self._drain_task(self.accumulate_task)
             self.accumulate_task = None
         if self.fixed_peers_handle:
             self.fixed_peers_handle.cancel()
@@ -226,4 +264,5 @@ class StreamDownloader:
         self._clear_prefetch()
         if self._progress_task and not self._progress_task.done():
             self._progress_task.cancel()
+            self._drain_task(self._progress_task)
         self._progress_task = None

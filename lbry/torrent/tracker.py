@@ -6,6 +6,7 @@ import asyncio
 import logging
 import time
 import ipaddress
+import typing
 from collections import namedtuple
 from functools import reduce
 from typing import Optional
@@ -236,11 +237,27 @@ def enqueue_tracker_search(info_hash: bytes, peer_q: asyncio.Queue):
 
 
 def announcement_to_kademlia_peers(*announcements: AnnounceResponse):
-    peers = [
-        (str(ipaddress.ip_address(peer.address)), peer.port)
-        for announcement in announcements for peer in announcement.peers if peer.port > 1024  # no privileged or 0
-    ]
-    return get_kademlia_peers_from_hosts(peers)
+    peers: typing.List[typing.Tuple[str, int]] = []
+    for announcement in announcements:
+        for peer in announcement.peers:
+            if peer.port <= 1024:
+                continue
+            try:
+                ip = ipaddress.ip_address(peer.address)
+            except ValueError:
+                log.debug("Skipping tracker peer with invalid address %s", peer.address)
+                continue
+            if ip.is_private or ip.is_unspecified or ip.is_loopback:
+                log.debug("Skipping non-public tracker peer %s:%d", ip, peer.port)
+                continue
+            peers.append((str(ip), peer.port))
+    if not peers:
+        return []
+    try:
+        return get_kademlia_peers_from_hosts(peers)
+    except ValueError as err:
+        log.debug("Failed to convert tracker peers to kademlia peers: %s", err)
+        return []
 
 
 class UDPTrackerServerProtocol(asyncio.DatagramProtocol):  # for testing. Not suitable for production
