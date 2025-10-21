@@ -1384,9 +1384,7 @@ class Daemon(metaclass=JSONRPCServerType):
             await new_account.maybe_migrate_certificates()
         if added_accounts and self.ledger.network.is_connected:
             if blocking:
-                await asyncio.wait([
-                    a.ledger.subscribe_account(a) for a in added_accounts
-                ])
+                await asyncio.gather(*(a.ledger.subscribe_account(a) for a in added_accounts))
             else:
                 for new_account in added_accounts:
                     asyncio.create_task(self.ledger.subscribe_account(new_account))
@@ -2002,9 +2000,7 @@ class Daemon(metaclass=JSONRPCServerType):
                 await new_account.maybe_migrate_certificates()
             if added_accounts and self.ledger.network.is_connected:
                 if blocking:
-                    await asyncio.wait([
-                        a.ledger.subscribe_account(a) for a in added_accounts
-                    ])
+                    await asyncio.gather(*(a.ledger.subscribe_account(a) for a in added_accounts))
                 else:
                     for new_account in added_accounts:
                         asyncio.create_task(self.ledger.subscribe_account(new_account))
