@@ -5365,7 +5365,8 @@ class Daemon(metaclass=JSONRPCServerType):
         Usage:
             file_reflect [--sd_hash=<sd_hash>] [--file_name=<file_name>]
                          [--stream_hash=<stream_hash>] [--rowid=<rowid>]
-                         [--reflector=<reflector>]
+                         [--reflector=<reflector>] [--server=<server>] [--port=<port>]
+                         [--timeout=<seconds>]
 
         Options:
             --sd_hash=<sd_hash>          : (str) get file with matching sd hash
@@ -5375,24 +5376,109 @@ class Daemon(metaclass=JSONRPCServerType):
             --rowid=<rowid>              : (int) get file with matching row id
             --reflector=<reflector>      : (str) reflector server, ip address or url
                                            by default choose a server from the config
+            --server=<server>            : (str) reflector host override
+            --port=<port>                : (int) reflector port override
+            --timeout=<seconds>          : (float) optional timeout per stream reflection
 
         Returns:
-            (list) list of blobs reflected
+            (list) per-stream reflection info
         """
 
-        server, port = kwargs.get('server'), kwargs.get('port')
-        if server and port:
-            port = int(port)
-        else:
-            server, port = random.choice(self.conf.reflector_servers)
-        reflected = await asyncio.gather(*[
-            self.file_manager.source_managers['stream'].reflect_stream(stream, server, port)
-            for stream in self.file_manager.get_filtered(**kwargs)
-        ])
-        total = []
-        for reflected_for_stream in reflected:
-            total.extend(reflected_for_stream)
-        return total
+        filters = dict(kwargs)
+        timeout = filters.pop('timeout', None)
+        if timeout is not None:
+            try:
+                timeout = float(timeout)
+            except (TypeError, ValueError):
+                raise ValueError("timeout must be a number of seconds") from None
+
+        reflector = filters.pop('reflector', None)
+        server = filters.pop('server', None)
+        port = filters.pop('port', None)
+
+        if reflector and not (server or port):
+            if ':' in reflector:
+                server, port_str = reflector.rsplit(':', 1)
+                try:
+                    port = int(port_str)
+                except ValueError:
+                    raise ValueError("reflector port must be an integer") from None
+            else:
+                server = reflector
+
+        if port is not None:
+            try:
+                port = int(port)
+            except (TypeError, ValueError):
+                raise ValueError("reflector port must be an integer") from None
+
+        streams = self.file_manager.get_filtered(**filters)
+        total_streams = len(streams)
+        if not total_streams:
+            return []
+
+        results = []
+        stream_manager = self.file_manager.source_managers['stream']
+        for idx, stream in enumerate(streams, start=1):
+            chosen_server, chosen_port = server, port
+            if not chosen_server or not chosen_port:
+                chosen_server, chosen_port = random.choice(self.conf.reflector_servers)
+            log.info(
+                "Reflecting stream %s (%d/%d) via %s:%d",
+                stream.sd_hash[:6], idx, total_streams, chosen_server, chosen_port
+            )
+            sent: typing.List[str] = []
+            start_time = time.perf_counter()
+            task = stream_manager.reflect_stream(stream, chosen_server, chosen_port)
+            try:
+                if timeout:
+                    sent = await asyncio.wait_for(task, timeout)
+                else:
+                    sent = await task
+                elapsed = time.perf_counter() - start_time
+                results.append({
+                    "sd_hash": stream.sd_hash,
+                    "stream_hash": stream.stream_hash,
+                    "reflected_blobs": sent,
+                    "blob_count": len(sent),
+                    "fully_reflected": stream.fully_reflected.is_set(),
+                    "reflector": f"{chosen_server}:{chosen_port}",
+                    "elapsed": elapsed,
+                })
+                log.info(
+                    "Reflected %d blobs for %s (%d/%d) in %.2fs",
+                    len(sent), stream.sd_hash[:6], idx, total_streams, elapsed
+                )
+            except asyncio.TimeoutError:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+                elapsed = time.perf_counter() - start_time
+                log.warning(
+                    "Timed out reflecting %s after %.2fs via %s:%d",
+                    stream.sd_hash[:6], elapsed, chosen_server, chosen_port
+                )
+                results.append({
+                    "sd_hash": stream.sd_hash,
+                    "stream_hash": stream.stream_hash,
+                    "reflected_blobs": sent,
+                    "blob_count": len(sent),
+                    "fully_reflected": stream.fully_reflected.is_set(),
+                    "reflector": f"{chosen_server}:{chosen_port}",
+                    "elapsed": elapsed,
+                    "error": "timeout",
+                })
+            except Exception as err:  # pragma: no cover
+                log.exception("Unexpected error reflecting %s", stream.sd_hash)
+                results.append({
+                    "sd_hash": stream.sd_hash,
+                    "stream_hash": stream.stream_hash,
+                    "reflected_blobs": sent,
+                    "blob_count": len(sent),
+                    "fully_reflected": stream.fully_reflected.is_set(),
+                    "reflector": f"{chosen_server}:{chosen_port}",
+                    "error": str(err),
+                })
+        return results
 
     @requires(DHT_COMPONENT)
     async def jsonrpc_peer_ping(self, node_id, address, port):
