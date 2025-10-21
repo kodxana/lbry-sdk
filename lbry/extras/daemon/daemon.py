@@ -5591,10 +5591,21 @@ class Daemon(metaclass=JSONRPCServerType):
                     await self.blob_manager.blob_completed(sd_blob)
 
                     file_name = descriptor.suggested_file_name or descriptor.stream_name or None
+                    download_directory = None
+                    if not file_name:
+                        download_directory = None
+                    if not file_name or not download_directory:
+                        # ensure we don't mark a download location when it is unknown
+                        file_name_for_db = None
+                        download_directory_for_db = None
+                    else:
+                        file_name_for_db = file_name
+                        download_directory_for_db = download_directory
+
                     rowid = await self.file_manager.storage.save_published_file(
                         descriptor.stream_hash,
-                        file_name,
-                        None,
+                        file_name_for_db,
+                        download_directory_for_db,
                         0.0,
                         status=ManagedStream.STATUS_STOPPED,
                         added_on=int(time.time())
