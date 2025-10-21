@@ -10,6 +10,7 @@ import typing
 import random
 import tracemalloc
 import itertools
+import string
 from urllib.parse import urlencode, quote
 from typing import Callable, Optional, List
 from binascii import hexlify, unhexlify
@@ -33,6 +34,8 @@ from lbry.crypto.base58 import Base58
 from lbry import utils
 from lbry.conf import Config, Setting, NOT_SET
 from lbry.blob.blob_file import is_valid_blobhash, BlobBuffer
+from lbry.stream.descriptor import StreamDescriptor, InvalidStreamDescriptorError
+from lbry.stream.managed_stream import ManagedStream
 from lbry.blob_exchange.downloader import download_blob
 from lbry.dht.peer import make_kademlia_peer
 from lbry.error import (
@@ -5479,6 +5482,162 @@ class Daemon(metaclass=JSONRPCServerType):
                     "error": str(err),
                 })
         return results
+
+    @requires(BLOB_COMPONENT, FILE_MANAGER_COMPONENT)
+    async def jsonrpc_blob_reindex(self, directory: typing.Optional[str] = None, limit: typing.Optional[int] = None):
+        """
+        Scan blob directories for stream descriptors and register any missing streams/blobs.
+
+        Usage:
+            blob_reindex [--directory=<path>] [--limit=<count>]
+
+        Options:
+            --directory=<path> : (str) optional directory to scan instead of the configured blob dirs
+            --limit=<count>    : (int) optional number of descriptors to process
+
+        Returns:
+            (dict) {
+                "found": <int>,
+                "added": <int>,
+                "skipped": <int>,
+                "streams": [ { sd_hash, stream_hash, blobs, missing, error?, elapsed } ... ]
+            }
+        """
+
+        loop = asyncio.get_running_loop()
+        blob_dirs = [directory] if directory else list(self.blob_manager.blob_dirs)
+        blob_dirs = [os.path.abspath(d) for d in blob_dirs if d and os.path.isdir(d)]
+        if not blob_dirs:
+            raise ValueError("no blob directories to scan")
+
+        try:
+            limit = int(limit) if limit is not None else None
+            if limit is not None and limit <= 0:
+                limit = None
+        except (TypeError, ValueError):
+            raise ValueError("limit must be an integer") from None
+
+        existing_streams = set(await self.file_manager.storage.get_all_stream_hashes())
+        processed = 0
+        added = 0
+        skipped = 0
+        streams_info: typing.List[typing.Dict[str, typing.Any]] = []
+
+        def _candidate_hashes(path: str) -> typing.List[str]:
+            try:
+                entries = os.listdir(path)
+            except OSError:
+                return []
+            candidates = []
+            for entry in entries:
+                if len(entry) != 96:
+                    continue
+                if all(c in string.hexdigits for c in entry):
+                    candidates.append(entry.lower())
+            return candidates
+
+        for blob_dir in blob_dirs:
+            hashes = await loop.run_in_executor(None, _candidate_hashes, blob_dir)
+            for sd_hash in hashes:
+                if limit is not None and processed >= limit:
+                    break
+                processed += 1
+                sd_blob = self.blob_manager.get_blob(sd_hash)
+                start_time = time.perf_counter()
+                try:
+                    descriptor = await StreamDescriptor.from_stream_descriptor_blob(
+                        loop, self.blob_manager.blob_dir, sd_blob
+                    )
+                except InvalidStreamDescriptorError:
+                    skipped += 1
+                    continue
+                except Exception as err:
+                    log.debug("failed to parse blob %s as descriptor: %s", sd_hash[:6], err)
+                    skipped += 1
+                    continue
+
+                stream_hash = descriptor.stream_hash
+                if stream_hash in existing_streams:
+                    skipped += 1
+                    continue
+
+                # verify required blobs exist locally
+                missing = []
+                blob_tasks = []
+                for blob_info in descriptor.blobs:
+                    if not blob_info.blob_hash:
+                        continue
+                    blob_file = self.blob_manager.get_blob(blob_info.blob_hash, blob_info.length)
+                    if not blob_file.file_exists:
+                        missing.append(blob_info.blob_hash)
+                        break
+                    blob_file.length = blob_file.length or blob_info.length
+                    blob_tasks.append(self.blob_manager.blob_completed(blob_file))
+
+                if missing:
+                    log.warning("descriptor %s missing %d blobs, skipping", sd_hash[:6], len(missing))
+                    streams_info.append({
+                        "sd_hash": sd_hash,
+                        "stream_hash": stream_hash,
+                        "missing": missing,
+                        "error": "missing_blobs"
+                    })
+                    skipped += 1
+                    continue
+
+                try:
+                    await self.file_manager.storage.store_stream(sd_blob, descriptor)
+                    await asyncio.gather(*blob_tasks)
+                    await self.blob_manager.blob_completed(sd_blob)
+
+                    file_name = descriptor.suggested_file_name or descriptor.stream_name or None
+                    rowid = await self.file_manager.storage.save_published_file(
+                        descriptor.stream_hash,
+                        file_name,
+                        None,
+                        0.0,
+                        status=ManagedStream.STATUS_STOPPED,
+                        added_on=int(time.time())
+                    )
+                    await self.file_manager._load_stream(
+                        rowid,
+                        descriptor.sd_hash,
+                        file_name,
+                        None,
+                        ManagedStream.STATUS_STOPPED,
+                        None,
+                        None,
+                        int(time.time()),
+                        False
+                    )
+                    existing_streams.add(stream_hash)
+                    elapsed = time.perf_counter() - start_time
+                    streams_info.append({
+                        "sd_hash": sd_hash,
+                        "stream_hash": stream_hash,
+                        "blobs": len(descriptor.blobs),
+                        "elapsed": elapsed
+                    })
+                    added += 1
+                    log.info("Indexed stream %s (%d blobs)", sd_hash[:6], len(descriptor.blobs))
+                except Exception as err:
+                    log.exception("failed to register descriptor %s", sd_hash)
+                    streams_info.append({
+                        "sd_hash": sd_hash,
+                        "stream_hash": stream_hash,
+                        "error": str(err)
+                    })
+                    skipped += 1
+
+            if limit is not None and processed >= limit:
+                break
+
+        return {
+            "found": processed,
+            "added": added,
+            "skipped": skipped,
+            "streams": streams_info
+        }
 
     @requires(DHT_COMPONENT)
     async def jsonrpc_peer_ping(self, node_id, address, port):
