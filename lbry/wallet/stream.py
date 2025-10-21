@@ -66,14 +66,15 @@ class StreamController:
 
     def _notify_and_ensure_future(self, notify):
         tasks = []
+        loop = asyncio.get_event_loop()
         for subscription in self._iterate_subscriptions:
             maybe_coroutine = notify(subscription)
             if asyncio.iscoroutine(maybe_coroutine):
-                tasks.append(maybe_coroutine)
+                tasks.append(loop.create_task(maybe_coroutine))
         if tasks:
-            return asyncio.ensure_future(asyncio.wait(tasks))
+            return asyncio.gather(*tasks)
         else:
-            f = asyncio.get_event_loop().create_future()
+            f = loop.create_future()
             f.set_result(None)
             return f
 

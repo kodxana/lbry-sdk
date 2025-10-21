@@ -233,9 +233,7 @@ class ExchangeRateManager:
         self.market_feeds = [Feed() for Feed in feeds]
 
     def wait(self):
-        loop = asyncio.get_running_loop()
-        tasks = [loop.create_task(feed.event.wait()) for feed in self.market_feeds]
-        return asyncio.wait(tasks)
+        return asyncio.gather(*(feed.event.wait() for feed in self.market_feeds))
 
     def start(self):
         log.info("Starting exchange rate manager")

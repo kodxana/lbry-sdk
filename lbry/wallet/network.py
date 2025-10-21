@@ -314,10 +314,14 @@ class Network:
     async def network_loop(self):
         sleep_delay = 30
         while self.running:
-            await asyncio.wait(
-                map(asyncio.create_task, [asyncio.sleep(30), self._urgent_need_reconnect.wait()]),
+            sleep_task = asyncio.create_task(asyncio.sleep(sleep_delay))
+            urgent_task = asyncio.create_task(self._urgent_need_reconnect.wait())
+            done, pending = await asyncio.wait(
+                [sleep_task, urgent_task],
                 return_when=asyncio.FIRST_COMPLETED
             )
+            for task in pending:
+                task.cancel()
             if self._urgent_need_reconnect.is_set():
                 sleep_delay = 30
             self._urgent_need_reconnect.clear()
