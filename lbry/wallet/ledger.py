@@ -8,6 +8,7 @@ from functools import partial
 from operator import itemgetter
 from collections import defaultdict
 from binascii import hexlify, unhexlify
+from contextlib import suppress
 from typing import Dict, Tuple, Type, Iterable, List, Optional, DefaultDict, NamedTuple
 
 from lbry.schema.result import Outputs, INVALID, NOT_FOUND, BLOCKED
@@ -329,10 +330,10 @@ class Ledger(metaclass=LedgerRegistry):
     async def start(self):
         if not os.path.exists(self.path):
             os.mkdir(self.path)
-        await asyncio.wait(map(asyncio.create_task, [
+        await asyncio.gather(
             self.db.open(),
             self.headers.open()
-        ]))
+        )
         fully_synced = self.on_ready.first
         asyncio.create_task(self.network.start())
         await self.network.on_connected.first
@@ -466,9 +467,7 @@ class Ledger(metaclass=LedgerRegistry):
     async def subscribe_accounts(self):
         if self.network.is_connected and self.accounts:
             log.info("Subscribe to %i accounts", len(self.accounts))
-            await asyncio.wait(map(asyncio.create_task, [
-                self.subscribe_account(a) for a in self.accounts
-            ]))
+            await asyncio.gather(*(self.subscribe_account(a) for a in self.accounts))
 
     async def subscribe_account(self, account: Account):
         for address_manager in account.address_managers.values():
@@ -756,12 +755,21 @@ class Ledger(metaclass=LedgerRegistry):
 
     async def _wait_round(self, tx: Transaction, height: int, addresses: Iterable[str]):
         records = await self.db.get_addresses(address__in=addresses)
-        _, pending = await asyncio.wait([
-            self.on_transaction.where(partial(
+        loop = asyncio.get_running_loop()
+        tasks = [
+            loop.create_task(self.on_transaction.where(partial(
                 lambda a, e: a == e.address and e.tx.height >= height and e.tx.id == tx.id,
                 address_record['address']
-            )) for address_record in records
-        ], timeout=1)
+            )))
+            for address_record in records
+        ]
+        if not tasks:
+            return False
+        _, pending = await asyncio.wait(tasks, timeout=1)
+        for task in pending:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
         if not pending:
             return True
         records = await self.db.get_addresses(address__in=addresses)

@@ -46,6 +46,8 @@ class MarketFeed:
         self._last_response = None
         self._task: Optional[asyncio.Task] = None
         self.event = asyncio.Event()
+        self._consecutive_failures = 0
+        self._last_failure_signature: Optional[str] = None
 
     @property
     def has_rate(self):
@@ -79,19 +81,25 @@ class MarketFeed:
             log.debug("Saving rate update %f for %s from %s", rate, self.market, self.name)
             self.rate = ExchangeRate(self.market, rate, int(time.time()))
             self.last_check = time.time()
+            self._consecutive_failures = 0
+            self._last_failure_signature = None
             return self.rate
         except asyncio.TimeoutError:
-            log.warning("Timed out fetching exchange rate from %s.", self.name)
+            self._record_failure("Timed out fetching exchange rate from %s.", self.name)
         except json.JSONDecodeError as e:
             msg = e.doc if '<html>' not in e.doc else 'unexpected content type.'
-            log.warning("Could not parse exchange rate response from %s: %s", self.name, msg)
+            self._record_failure("Could not parse exchange rate response from %s: %s", self.name, msg)
             log.debug(e.doc)
         except InvalidExchangeRateResponseError as e:
-            log.warning(str(e))
+            self._record_failure(str(e))
         except ClientConnectionError as e:
-            log.warning("Error trying to connect to exchange rate %s: %s", self.name, str(e))
+            self._record_failure("Error trying to connect to exchange rate %s: %s", self.name, str(e))
         except Exception as e:
-            log.exception("Exchange rate error (%s from %s):", self.market, self.name)
+            failure_count = self._record_failure(
+                "Unexpected exchange rate error from %s: %s", self.name, str(e)
+            )
+            if failure_count == 1:
+                log.debug("Full traceback for exchange rate error from %s", self.name, exc_info=True)
         finally:
             self.event.set()
 
@@ -109,6 +117,26 @@ class MarketFeed:
             self._task.cancel()
         self._task = None
         self.event.clear()
+        self._consecutive_failures = 0
+        self._last_failure_signature = None
+
+    def _record_failure(self, message: str, *args) -> int:
+        signature = message % args if args else message
+        if signature != self._last_failure_signature:
+            self._consecutive_failures = 0
+            self._last_failure_signature = signature
+        self._consecutive_failures += 1
+        formatted = signature
+
+        if self._consecutive_failures == 1:
+            log.debug("Exchange rate feed offline: %s", formatted)
+            return self._consecutive_failures
+
+        if self._consecutive_failures in (5, 15, 30, 60):
+            log.debug("Exchange rate feed still offline: %s (repeat #%d)", formatted, self._consecutive_failures)
+        else:
+            log.debug("%s (repeat #%d)", formatted, self._consecutive_failures)
+        return self._consecutive_failures
 
 
 class BaseBittrexFeed(MarketFeed):
@@ -205,9 +233,9 @@ class ExchangeRateManager:
         self.market_feeds = [Feed() for Feed in feeds]
 
     def wait(self):
-        return asyncio.wait(
-            [feed.event.wait() for feed in self.market_feeds],
-        )
+        loop = asyncio.get_running_loop()
+        tasks = [loop.create_task(feed.event.wait()) for feed in self.market_feeds]
+        return asyncio.wait(tasks)
 
     def start(self):
         log.info("Starting exchange rate manager")
