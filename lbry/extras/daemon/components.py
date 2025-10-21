@@ -8,6 +8,10 @@ import typing
 import base58
 import importlib
 
+from lbry.extras.daemon.aioupnp_compat import apply_asyncio_compatibility_patch
+
+apply_asyncio_compatibility_patch()
+
 from aioupnp import __version__ as aioupnp_version
 from aioupnp.upnp import UPnP
 from aioupnp.fault import UPnPError

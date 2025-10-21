@@ -17,14 +17,39 @@ DEFAULT_FLAGS = (  # fixme: somehow the logic here is inverted?
 )
 
 
+async def _new_event() -> asyncio.Event:
+    return asyncio.Event()
+
+
+def _create_loop_event(loop: asyncio.AbstractEventLoop) -> asyncio.Event:
+    """
+    Create an asyncio.Event bound to the provided loop even when called from a
+    thread where no event loop is currently running.
+    """
+    if loop.is_running():
+        return asyncio.run_coroutine_threadsafe(_new_event(), loop).result()
+    try:
+        previous = asyncio.get_event_loop()
+    except RuntimeError:
+        previous = None
+    asyncio.set_event_loop(loop)
+    try:
+        return asyncio.Event()
+    finally:
+        if previous is None:
+            asyncio.set_event_loop(None)
+        else:
+            asyncio.set_event_loop(previous)
+
+
 class TorrentHandle:
     def __init__(self, loop, executor, handle):
         self._loop = loop
         self._executor = executor
         self._handle: libtorrent.torrent_handle = handle
-        self.started = asyncio.Event(loop=loop)
-        self.finished = asyncio.Event(loop=loop)
-        self.metadata_completed = asyncio.Event(loop=loop)
+        self.started = _create_loop_event(loop)
+        self.finished = _create_loop_event(loop)
+        self.metadata_completed = _create_loop_event(loop)
         self.size = 0
         self.total_wanted_done = 0
         self.name = ''
