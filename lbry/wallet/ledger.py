@@ -755,9 +755,8 @@ class Ledger(metaclass=LedgerRegistry):
 
     async def _wait_round(self, tx: Transaction, height: int, addresses: Iterable[str]):
         records = await self.db.get_addresses(address__in=addresses)
-        loop = asyncio.get_running_loop()
         tasks = [
-            loop.create_task(self.on_transaction.where(partial(
+            asyncio.ensure_future(self.on_transaction.where(partial(
                 lambda a, e: a == e.address and e.tx.height >= height and e.tx.id == tx.id,
                 address_record['address']
             )))
