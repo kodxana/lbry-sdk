@@ -51,6 +51,8 @@ setup(
         'coincurve==15.0.0',
         'pbkdf2==1.3',
         'filetype==1.0.9',
+        # setuptools provides pkg_resources, needed for version comparison
+        'setuptools>=65.0.0',
     ],
     extras_require={
         'lint': [
