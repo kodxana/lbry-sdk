@@ -138,7 +138,7 @@ class AsyncioTestCase(unittest.TestCase):
                 self.loop.run_until_complete(self.asyncSetUp())
             if outcome.success:
                 outcome.expecting_failure = expecting_failure
-                with outcome.testPartExecutor(self, isTest=True):
+                with outcome.testPartExecutor(self):
                     maybe_coroutine = testMethod()
                     if asyncio.iscoroutine(maybe_coroutine):
                         self.add_timeout()
@@ -180,8 +180,11 @@ class AsyncioTestCase(unittest.TestCase):
             # explicitly break reference cycles:
             # outcome.errors -> frame -> outcome -> outcome.errors
             # outcome.expectedFailure -> frame -> outcome -> outcome.expectedFailure
-            outcome.errors.clear()
-            outcome.expectedFailure = None
+            # In Python 3.12+, the _Outcome structure changed
+            if hasattr(outcome, 'errors'):
+                outcome.errors.clear()
+            if hasattr(outcome, 'expectedFailure'):
+                outcome.expectedFailure = None
 
             # clear the outcome, no more needed
             self._outcome = None
