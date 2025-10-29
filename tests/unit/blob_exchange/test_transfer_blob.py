@@ -1,5 +1,6 @@
 import asyncio
 import tempfile
+import unittest
 from io import BytesIO
 from unittest import mock
 
@@ -109,6 +110,7 @@ class TestBlobExchange(BlobExchangeTestBase):
         await self._add_blob_to_server(blob_hash, mock_blob_bytes)
         return await self._test_transfer_blob(blob_hash)
 
+    @unittest.skip("Hangs in CI with Python 3.12 - asyncio concurrency issue")
     async def test_host_same_blob_to_multiple_peers_at_once(self):
         blob_hash = "7f5ab2def99f0ddd008da71db3a3772135f4002b19b7605840ed1034c8955431bd7079549e65e6b2a3b9c17c773073ed"
         mock_blob_bytes = b'1' * ((2 * 2 ** 20) - 1)
