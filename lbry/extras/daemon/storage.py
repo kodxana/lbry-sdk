@@ -607,7 +607,7 @@ class SQLiteStorage(SQLiteMixin):
             "select sd_hash from stream where stream_hash=?", stream_hash
         )
 
-    def get_stream_hash_for_sd_hash(self, sd_blob_hash):
+    def get_stream_hash_for_sd_blob(self, sd_blob_hash):
         return self.run_and_return_one_or_none(
             "select stream_hash from stream where sd_hash = ?", sd_blob_hash
         )

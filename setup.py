@@ -36,7 +36,7 @@ setup(
         'aioupnp==0.0.18',
         'appdirs==1.4.3',
         'certifi>=2021.10.08',
-        'colorama==0.3.7',
+        'colorama>=0.4.5',
         'distro==1.4.0',
         'base58==1.0.0',
         # Use a modern cffi with prebuilt wheels for Python 3.12+
@@ -54,7 +54,7 @@ setup(
     ],
     extras_require={
         'lint': [
-            'pylint==2.13.9'
+            'pylint>=3.0.0'
         ],
         'test': [
             'coverage',

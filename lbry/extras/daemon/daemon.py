@@ -4939,7 +4939,8 @@ class Daemon(metaclass=JSONRPCServerType):
 
         Returns:
             {
-              'totals': { 'network_storage': intMB, 'content_storage': intMB, 'private_storage': intMB, 'total': intMB },
+              'totals': { 'network_storage': intMB, 'content_storage': intMB,
+                          'private_storage': intMB, 'total': intMB },
               'claims': [ { 'claim_id': str, 'name': str, 'url': str,
                             'sd_hash': str, 'stream_hash': str, 'saved_file': bool, 'pinned': bool,
                             'blobs_present': int, 'blobs_total': int, 'size_mb': int, 'last_added_on': int } ]

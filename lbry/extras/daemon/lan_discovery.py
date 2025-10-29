@@ -128,4 +128,3 @@ class LANDiscovery:
                 log.debug("LAN discovered %s:%d (tcp:%s)", address, udp_port, tcp_port)
             except Exception:
                 pass
-

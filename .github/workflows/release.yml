@@ -7,7 +7,7 @@ on:
 jobs:
   release:
     name: "slack notification"
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: LoveToKnow/slackify-markdown-action@v1.0.0
         id: markdown

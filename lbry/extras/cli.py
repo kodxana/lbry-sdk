@@ -4,15 +4,15 @@ import shutil
 import signal
 import pathlib
 import json
+import json as jsonlib
 import asyncio
 import argparse
 import logging
 import logging.handlers
 import datetime
-import json as jsonlib
+from contextlib import suppress
 
 import aiohttp
-from contextlib import suppress
 from aiohttp.web import GracefulExit
 from docopt import docopt
 
