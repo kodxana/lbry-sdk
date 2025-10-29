@@ -137,13 +137,15 @@ class AsyncioTestCase(unittest.TestCase):
                 self.add_timeout()
                 self.loop.run_until_complete(self.asyncSetUp())
             if outcome.success:
-                outcome.expecting_failure = expecting_failure
+                if hasattr(outcome, 'expecting_failure'):
+                    outcome.expecting_failure = expecting_failure
                 with outcome.testPartExecutor(self):
                     maybe_coroutine = testMethod()
                     if asyncio.iscoroutine(maybe_coroutine):
                         self.add_timeout()
                         self.loop.run_until_complete(maybe_coroutine)
-                outcome.expecting_failure = False
+                if hasattr(outcome, 'expecting_failure'):
+                    outcome.expecting_failure = False
                 with outcome.testPartExecutor(self):
                     self.add_timeout()
                     self.loop.run_until_complete(self.asyncTearDown())
@@ -158,12 +160,16 @@ class AsyncioTestCase(unittest.TestCase):
                 asyncio.set_event_loop(None)
                 self.loop.close()
 
-            for test, reason in outcome.skipped:
-                self._addSkip(result, test, reason)
-            self._feedErrorsToResult(result, outcome.errors)
+            # In Python 3.12+, _Outcome no longer has these attributes
+            # The outcome reports results directly through the context managers
+            if hasattr(outcome, 'skipped'):
+                for test, reason in outcome.skipped:
+                    self._addSkip(result, test, reason)
+            if hasattr(outcome, 'errors'):
+                self._feedErrorsToResult(result, outcome.errors)
             if outcome.success:
                 if expecting_failure:
-                    if outcome.expectedFailure:
+                    if hasattr(outcome, 'expectedFailure') and outcome.expectedFailure:
                         self._addExpectedFailure(result, outcome.expectedFailure)
                     else:
                         self._addUnexpectedSuccess(result)
