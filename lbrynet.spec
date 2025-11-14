@@ -1,13 +1,34 @@
 # -*- mode: python ; coding: utf-8 -*-
+import sys
+import os
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_dynamic_libs
 
+# Collect all binary dependencies from coincurve
+coincurve_binaries = collect_dynamic_libs('coincurve')
+coincurve_datas = collect_data_files('coincurve')
+
+# Collect protobuf schema files
+schema_datas = collect_data_files('lbry.schema')
+
+# Collect certifi certificates
+certifi_datas = collect_data_files('certifi')
+
+# Combine all binaries and datas
+all_binaries = coincurve_binaries
+all_datas = coincurve_datas + schema_datas + certifi_datas
 
 a = Analysis(
     ['lbry\\extras\\cli.py'],
     pathex=[],
-    binaries=[],
-    datas=[],
-    hiddenimports=[],
-    hookspath=['scripts/.'],
+    binaries=all_binaries,
+    datas=all_datas,
+    hiddenimports=[
+        'coincurve',
+        'coincurve._libsecp256k1',
+        'lbry.schema.claim',
+        'pkg_resources.py2_warn',
+    ],
+    hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
@@ -35,5 +56,4 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['icons\\lbry256.ico'],
 )
