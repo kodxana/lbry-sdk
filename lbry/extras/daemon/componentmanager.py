@@ -38,12 +38,16 @@ class ComponentManager:
                  peer_manager=None, **override_components):
         self.conf = conf
         self.skip_components = skip_components or []
-        self.loop = asyncio.get_event_loop()
+        try:
+            self.loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
         self.analytics_manager = analytics_manager
         self.component_classes = {}
         self.components = set()
         self.started = asyncio.Event()
-        self.peer_manager = peer_manager or PeerManager(asyncio.get_event_loop_policy().get_event_loop())
+        self.peer_manager = peer_manager or PeerManager(self.loop)
 
         for component_name, component_class in self.default_component_classes.items():
             if component_name in override_components:

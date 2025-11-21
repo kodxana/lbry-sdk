@@ -65,7 +65,7 @@ class ClientSession(BaseClientSession):
             await self._concurrency.acquire()
             if method == 'server.version':
                 return await self.send_timed_server_version_request(args, self.timeout)
-            request = asyncio.ensure_future(super().send_request(method, args))
+            request = asyncio.create_task(super().send_request(method, args))
             while not request.done():
                 done, pending = await asyncio.wait([request], timeout=self.timeout)
                 if pending:
@@ -248,7 +248,7 @@ class Network:
         return hostname_to_ip, ip_to_hostnames
 
     async def get_n_fastest_spvs(self, timeout=3.0) -> Dict[Tuple[str, int], Optional[SPVPong]]:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         pong_responses = asyncio.Queue()
         connection = SPVStatusClientProtocol(pong_responses)
         sent_ping_timestamps = {}

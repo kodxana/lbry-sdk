@@ -322,7 +322,8 @@ async def shutdown(signal, loop):
 
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     for sig in (signal.SIGHUP, signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(shutdown(s, loop)))
 

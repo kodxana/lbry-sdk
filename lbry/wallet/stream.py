@@ -66,7 +66,11 @@ class StreamController:
 
     def _notify_and_ensure_future(self, notify):
         tasks = []
-        loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop, create a future manually
+            loop = asyncio.new_event_loop()
         for subscription in self._iterate_subscriptions:
             maybe_coroutine = notify(subscription)
             if asyncio.iscoroutine(maybe_coroutine):
@@ -129,7 +133,11 @@ class Stream:
         return self._controller._listen(on_data, on_error, on_done)
 
     def where(self, condition) -> asyncio.Future:
-        future = asyncio.get_event_loop().create_future()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+        future = loop.create_future()
 
         def where_test(value):
             if condition(value):
@@ -144,7 +152,11 @@ class Stream:
 
     @property
     def first(self):
-        future = asyncio.get_event_loop().create_future()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+        future = loop.create_future()
         subscription = self.listen(
             lambda value: not future.done() and self._cancel_and_callback(subscription, future, value),
             lambda exception: not future.done() and self._cancel_and_error(subscription, future, exception)

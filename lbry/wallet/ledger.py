@@ -340,7 +340,7 @@ class Ledger(metaclass=LedgerRegistry):
         async with self._header_processing_lock:
             await self._update_tasks.add(self.initial_headers_sync())
         self.network.on_connected.listen(self.join_network)
-        asyncio.ensure_future(self.join_network())
+        asyncio.create_task(self.join_network())
         await fully_synced
         await self.db.release_all_outputs()
         await asyncio.gather(*(a.maybe_migrate_certificates() for a in self.accounts))
@@ -756,7 +756,7 @@ class Ledger(metaclass=LedgerRegistry):
     async def _wait_round(self, tx: Transaction, height: int, addresses: Iterable[str]):
         records = await self.db.get_addresses(address__in=addresses)
         tasks = [
-            asyncio.ensure_future(self.on_transaction.where(partial(
+            asyncio.create_task(self.on_transaction.where(partial(
                 lambda a, e: a == e.address and e.tx.height >= height and e.tx.id == tx.id,
                 address_record['address']
             )))

@@ -18,7 +18,7 @@ setup(
     long_description_content_type="text/markdown",
     keywords="lbry protocol media",
     license='MIT',
-    python_requires='>=3.8',
+    python_requires='>=3.14',
     packages=find_packages(exclude=('tests',)),
     zip_safe=False,
     entry_points={
@@ -28,31 +28,28 @@ setup(
         ],
     },
     install_requires=[
-        'aiohttp==3.7.4',
-        # Ensure compatibility with optional aiosignal (used by newer aiohttp builds) and PyInstaller
-        'typing_extensions>=4.12.2',
-        # Ensure compatibility if aiosignal is pulled in (aiohttp >=3.8 uses it)
-        'aiosignal>=1.3.1,<2.0.0',
+        'aiohttp>=3.10.0',
+        # aiosignal is now a dependency of aiohttp, no need to specify separately
         'aioupnp==0.0.18',
         'appdirs==1.4.3',
-        'certifi>=2021.10.08',
-        'colorama>=0.4.5',
-        'distro==1.4.0',
+        'certifi>=2023.11.17',
+        'colorama>=0.4.6',
+        'distro==1.9.0',
         'base58==1.0.0',
-        # Use a modern cffi with prebuilt wheels for Python 3.12+
-        'cffi>=1.15.1,<2.0.0',
-        'cryptography==3.4.7',
-        'protobuf==3.17.2',
-        'prometheus_client==0.7.1',
-        'ecdsa==0.13.3',
-        'pyyaml==5.3.1',
+        # Modern cffi with full Python 3.14 support
+        'cffi>=1.17.0',
+        'cryptography>=42.0.0',
+        'protobuf==3.20.3',
+        'prometheus_client==0.20.0',
+        'ecdsa==0.19.0',
+        'pyyaml>=6.0.1',
         'docopt==0.6.2',
-        'hachoir==3.1.2',
-        'coincurve==15.0.0',
+        'hachoir==3.3.0',
+        'coincurve==20.0.0',
         'pbkdf2==1.3',
-        'filetype==1.0.9',
+        'filetype==1.2.0',
         # setuptools provides pkg_resources, needed for version comparison
-        'setuptools>=65.0.0',
+        'setuptools>=70.0.0',
     ],
     extras_require={
         'lint': [

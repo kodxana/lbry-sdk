@@ -17,10 +17,10 @@ class BasicTransactionTests(IntegrationTestCase):
         # send 10 coins to first 10 receiving addresses and then 10 transactions worth 10 coins each
         # to the 10th receiving address for a total of 30 UTXOs on the entire account
         for i in range(10):
-            notification = asyncio.ensure_future(self.on_address_update(addresses[i]))
+            notification = asyncio.create_task(self.on_address_update(addresses[i]))
             _ = await self.send_to_address_and_wait(addresses[i], 10)
             await notification
-            notification = asyncio.ensure_future(self.on_address_update(addresses[9]))
+            notification = asyncio.create_task(self.on_address_update(addresses[9]))
             _ = await self.send_to_address_and_wait(addresses[9], 10)
             await notification
 
@@ -201,23 +201,23 @@ class BasicTransactionTests(IntegrationTestCase):
         self.ledger.coin_selection_strategy = 'sqlite'
         await self.ledger.subscribe_account(other_account)
 
-        accepted = asyncio.ensure_future(self.on_address_update(address))
+        accepted = asyncio.create_task(self.on_address_update(address))
         _ = await self.send_to_address_and_wait(address, 1.0)
         await accepted
 
-        accepted = asyncio.ensure_future(self.on_address_update(address))
+        accepted = asyncio.create_task(self.on_address_update(address))
         _ = await self.send_to_address_and_wait(address, 1.0)
         await accepted
 
-        accepted = asyncio.ensure_future(self.on_address_update(address))
+        accepted = asyncio.create_task(self.on_address_update(address))
         _ = await self.send_to_address_and_wait(address, 3.0)
         await accepted
 
-        accepted = asyncio.ensure_future(self.on_address_update(address))
+        accepted = asyncio.create_task(self.on_address_update(address))
         _ = await self.send_to_address_and_wait(address, 5.0)
         await accepted
 
-        accepted = asyncio.ensure_future(self.on_address_update(address))
+        accepted = asyncio.create_task(self.on_address_update(address))
         _ = await self.send_to_address_and_wait(address, 10.0)
         await accepted
 

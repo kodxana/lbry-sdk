@@ -56,7 +56,7 @@ class Headers:
                     with open(self.path, 'r+b') as header_file:
                         self.io.seek(0)
                         self.io.write(header_file.read())
-            await asyncio.get_event_loop().run_in_executor(None, _readit)
+            await asyncio.get_running_loop().run_in_executor(None, _readit)
         bytes_size = self.io.seek(0, os.SEEK_END)
         self._size = bytes_size // self.header_size
         max_checkpointed_height = max(self.checkpoints.keys() or [-1]) + 1000
@@ -75,7 +75,7 @@ class Headers:
                 flags = 'r+b' if os.path.exists(self.path) else 'w+b'
                 with open(self.path, flags) as header_file:
                     header_file.write(self.io.getbuffer())
-            await asyncio.get_event_loop().run_in_executor(None, _close)
+            await asyncio.get_running_loop().run_in_executor(None, _close)
             self.io.close()
             self.io = None
 

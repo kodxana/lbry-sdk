@@ -126,7 +126,8 @@ class DHTPeer:
 
 def new_node(address="0.0.0.0", udp_port=0, node_id=None):
     node_id = node_id or generate_id()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     return Node(loop, PeerManager(loop), node_id, udp_port, udp_port, 3333, address)
 
 
@@ -427,7 +428,7 @@ class Crawler:
         to_process = {}
 
         def submit(_peer):
-            f = asyncio.ensure_future(
+            f = asyncio.create_task(
                 self.crawl_routing_table(_peer.address, _peer.udp_port, bytes.fromhex(_peer.node_id)))
             to_process[_peer.peer_id] = f
             f.add_done_callback(lambda _: to_process.pop(_peer.peer_id))

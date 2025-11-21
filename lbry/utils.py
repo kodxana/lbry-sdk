@@ -416,7 +416,7 @@ async def _get_external_ip(default_servers) -> typing.Tuple[typing.Optional[str]
     # accumulate the dns results
     await asyncio.gather(*(resolve_spv(server, port) for (server, port) in default_servers))
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     pong_responses = asyncio.Queue()
     connection = SPVStatusClientProtocol(pong_responses)
     try:

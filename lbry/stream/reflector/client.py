@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 class StreamReflectorClient(asyncio.Protocol):
     def __init__(self, blob_manager: 'BlobManager', descriptor: 'StreamDescriptor'):
-        self.loop = asyncio.get_event_loop()
+        self._loop = None
         self.transport: typing.Optional[asyncio.WriteTransport] = None
         self.blob_manager = blob_manager
         self.descriptor = descriptor
@@ -26,6 +26,16 @@ class StreamReflectorClient(asyncio.Protocol):
         self.connected = asyncio.Event()
         self.response_queue = asyncio.Queue(maxsize=1)
         self.pending_request: typing.Optional[asyncio.Task] = None
+
+    @property
+    def loop(self):
+        """Get the event loop, preferring the running loop if available."""
+        if self._loop:
+            return self._loop
+        try:
+            return asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.get_event_loop()
 
     def connection_made(self, transport):
         self.transport = transport

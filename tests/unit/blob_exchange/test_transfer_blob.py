@@ -31,7 +31,7 @@ def mock_config():
 
 class BlobExchangeTestBase(AsyncioTestCase):
     async def asyncSetUp(self):
-        self.loop = asyncio.get_event_loop()
+        self.loop = asyncio.get_running_loop()
         self.client_wallet_dir = tempfile.mkdtemp()
         self.client_dir = tempfile.mkdtemp()
         self.server_dir = tempfile.mkdtemp()
