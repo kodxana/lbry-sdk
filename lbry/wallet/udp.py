@@ -180,7 +180,7 @@ class StatusServer:
     async def start(self, height: int, tip: bytes, country: str, interface: str, port: int, allow_lan: bool = False):
         if self.is_running:
             return
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         interface = interface if interface.lower() != 'localhost' else '127.0.0.1'
         self._protocol = SPVServerStatusProtocol(
             height, tip, country, allow_localhost=interface == '127.0.0.1', allow_lan=allow_lan

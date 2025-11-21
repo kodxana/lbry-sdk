@@ -421,7 +421,7 @@ class LBCDNode:
         self.stopped = False
         try:
             assert self.ensure()
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             asyncio.get_child_watcher().attach_loop(loop)
             command = [
                 self.daemon_bin,
@@ -549,7 +549,7 @@ class LBCWalletNode:
 
     async def start(self):
         assert self.ensure()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         asyncio.get_child_watcher().attach_loop(loop)
 
         command = [

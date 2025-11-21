@@ -18,10 +18,11 @@ class ReflectorServerProtocol(asyncio.Protocol):
     def __init__(self, blob_manager: 'BlobManager', response_chunk_size: int = 10000,
                  stop_event: asyncio.Event = None, incoming_event: asyncio.Event = None,
                  not_incoming_event: asyncio.Event = None, partial_event: asyncio.Event = None):
-        self.loop = asyncio.get_event_loop()
+        self._loop = None
         self.blob_manager = blob_manager
         self.server_task: asyncio.Task = None
         self.started_listening = asyncio.Event()
+
         self.buf = b''
         self.transport: asyncio.StreamWriter = None
         self.writer: typing.Optional['HashBlobWriter'] = None
@@ -35,6 +36,16 @@ class ReflectorServerProtocol(asyncio.Protocol):
         self.chunk_size = response_chunk_size
         self.wait_for_stop_task: typing.Optional[asyncio.Task] = None
         self.partial_event = partial_event
+
+    @property
+    def loop(self):
+        """Get the event loop, preferring the running loop if available."""
+        if self._loop:
+            return self._loop
+        try:
+            return asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.get_event_loop()
 
     async def wait_for_stop(self):
         await self.stop_event.wait()
@@ -159,16 +170,27 @@ class ReflectorServer:
     def __init__(self, blob_manager: 'BlobManager', response_chunk_size: int = 10000,
                  stop_event: asyncio.Event = None, incoming_event: asyncio.Event = None,
                  not_incoming_event: asyncio.Event = None, partial_needs=False):
-        self.loop = asyncio.get_event_loop()
+        self._loop = None
         self.blob_manager = blob_manager
         self.server_task: typing.Optional[asyncio.Task] = None
         self.started_listening = asyncio.Event()
         self.stopped_listening = asyncio.Event()
+
         self.incoming_event = incoming_event or asyncio.Event()
         self.not_incoming_event = not_incoming_event or asyncio.Event()
         self.response_chunk_size = response_chunk_size
         self.stop_event = stop_event
         self.partial_needs = partial_needs  # for testing cases where it doesn't know what it wants
+
+    @property
+    def loop(self):
+        """Get the event loop, preferring the running loop if available."""
+        if self._loop:
+            return self._loop
+        try:
+            return asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.get_event_loop()
 
     def start_server(self, port: int, interface: typing.Optional[str] = '0.0.0.0'):
         if self.server_task is not None:

@@ -62,7 +62,8 @@ class SimpleMetrics:
 
 
 async def main(host: str, port: int, db_file_path: str, bootstrap_node: Optional[str], prometheus_port: int, export: bool):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     conf = Config()
     if not db_file_path.startswith(':memory:'):
         node_id_file_path = db_file_path + 'node_id'

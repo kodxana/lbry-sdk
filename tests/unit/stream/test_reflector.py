@@ -12,7 +12,7 @@ from lbry.stream.reflector.server import ReflectorServer
 
 class TestReflector(AsyncioTestCase):
     async def asyncSetUp(self):
-        self.loop = asyncio.get_event_loop()
+        self.loop = asyncio.get_running_loop()
         self.key = b'deadbeef' * 4
         self.cleartext = os.urandom(20000000)
 

@@ -21,7 +21,7 @@ class _LANProtocol(asyncio.DatagramProtocol):
 
 class LANDiscovery:
     def __init__(self, loop: asyncio.AbstractEventLoop, dht_node, conf):
-        self.loop = loop
+        self.loop = loop  # Keep for compatibility but prefer get_running_loop()
         self.node = dht_node
         self.conf = conf
         self.group = getattr(conf, 'lan_discovery_group', '239.255.42.42')
@@ -34,6 +34,7 @@ class LANDiscovery:
         self.known_peers: typing.Set[typing.Tuple[str, int]] = set()
 
     async def start(self):
+        loop = asyncio.get_running_loop()
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         try:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -49,10 +50,10 @@ class LANDiscovery:
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
-        self.transport, _ = await self.loop.create_datagram_endpoint(
+        self.transport, _ = await loop.create_datagram_endpoint(
             lambda: _LANProtocol(self._on_packet), sock=sock
         )
-        self._task = self.loop.create_task(self._sender())
+        self._task = loop.create_task(self._sender())
         log.info("LAN discovery enabled on %s:%d", self.group, self.port)
 
     async def stop(self):

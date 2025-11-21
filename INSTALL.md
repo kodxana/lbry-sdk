@@ -9,16 +9,13 @@ Here's a video walkthrough of this setup, which is itself hosted by the LBRY net
 
 ## Prerequisites
 
-Running `lbrynet` from source requires Python 3.7. Get the installer for your OS [here](https://www.python.org/downloads/release/python-370/).
+Running `lbrynet` from source requires Python 3.14+. Get the installer for your OS [here](https://www.python.org/downloads/).
 
-After installing Python 3.7, you'll need to install some additional libraries depending on your operating system.
+After installing Python 3.14+, you'll need to install some additional libraries depending on your operating system.
 
-Because of [issue #2769](https://github.com/lbryio/lbry-sdk/issues/2769)
-at the moment the `lbrynet` daemon will only work correctly with Python 3.7.
-If Python 3.8+ is used, the daemon will start but the RPC server
-may not accept messages, returning the following:
+**Note:** For protobuf compatibility with newer Python versions, you may need to set:
 ```
-Could not connect to daemon. Are you sure it's running?
+export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 ```
 
 ### macOS
@@ -40,16 +37,13 @@ Assistance installing Python3: https://docs.python-guide.org/starting/install3/o
 
 ### Linux
 
-On Ubuntu (we recommend 18.04 or 20.04), install the following:
+On Ubuntu (we recommend 22.04 or newer), install the following:
 ```
-sudo add-apt-repository ppa:deadsnakes/ppa
 sudo apt-get update
-sudo apt-get install build-essential python3.7 python3.7-dev git python3.7-venv libssl-dev python-protobuf
+sudo apt-get install build-essential python3 python3-dev git python3-venv libssl-dev python3-protobuf
 ```
 
-The [deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa) provides Python 3.7
-for those Ubuntu distributions that no longer have it in their
-official repositories.
+For Python 3.14 on older distributions, you can use [pyenv](https://github.com/pyenv/pyenv) or build from source.
 
 On Raspbian, you will also need to install `python-pyparsing`.
 
@@ -67,7 +61,7 @@ cd lbry-sdk
 
 Create a Python virtual environment for lbry-sdk:
 ```bash
-python3.7 -m venv lbry-venv
+python3 -m venv lbry-venv
 ```
 
 Activate virtual environment:
@@ -75,7 +69,7 @@ Activate virtual environment:
 source lbry-venv/bin/activate
 ```
 
-Make sure you're on Python 3.7+ as default in the virtual environment:
+Make sure you're on Python 3.14+ as default in the virtual environment:
 ```bash
 python --version
 ```

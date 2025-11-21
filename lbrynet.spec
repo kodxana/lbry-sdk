@@ -1,33 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
 import sys
-import os
-from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_dynamic_libs
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
-# Collect all binary dependencies from coincurve
-coincurve_binaries = collect_dynamic_libs('coincurve')
-coincurve_datas = collect_data_files('coincurve')
-
-# Collect protobuf schema files
-schema_datas = collect_data_files('lbry.schema')
-
-# Collect certifi certificates
-certifi_datas = collect_data_files('certifi')
-
-# Combine all binaries and datas
-all_binaries = coincurve_binaries
-all_datas = coincurve_datas + schema_datas + certifi_datas
+# Collect all submodules needed for multiprocessing
+hiddenimports = ['multiprocessing', 'multiprocessing.resource_tracker', 'multiprocessing.spawn']
 
 a = Analysis(
-    ['lbry\\extras\\cli.py'],
+    ['lbry/extras/cli.py'],
     pathex=[],
-    binaries=all_binaries,
-    datas=all_datas,
-    hiddenimports=[
-        'coincurve',
-        'coincurve._libsecp256k1',
-        'lbry.schema.claim',
-        'pkg_resources.py2_warn',
-    ],
+    binaries=[],
+    datas=[],
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -56,4 +39,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    # Enable multiprocessing support
+    multiprocessing=True if sys.platform.startswith('win') else False,
 )

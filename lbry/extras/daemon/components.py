@@ -98,7 +98,7 @@ class DatabaseComponent(Component):
         if old_revision < self.get_current_db_revision():
             from lbry.extras.daemon.migrator import dbmigrator  # pylint: disable=import-outside-toplevel
             log.info("Upgrading your databases (revision %i to %i)", old_revision, self.get_current_db_revision())
-            await asyncio.get_event_loop().run_in_executor(
+            await asyncio.get_running_loop().run_in_executor(
                 None, dbmigrator.migrate_db, self.conf, old_revision, self.get_current_db_revision()
             )
             self._write_db_revision_file(self.get_current_db_revision())
@@ -407,7 +407,7 @@ class FileManagerComponent(Component):
         node = self.component_manager.get_component(DHT_COMPONENT) \
             if self.component_manager.has_component(DHT_COMPONENT) else None
         log.info('Starting the file manager')
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         self.file_manager = FileManager(
             loop, self.conf, wallet, storage, self.component_manager.analytics_manager
         )
@@ -617,7 +617,9 @@ class UPnPComponent(Component):
         # setup the gateway if necessary
         if not self.upnp:
             try:
-                self.upnp = await UPnP.discover(loop=self.component_manager.loop)
+                # Use get_running_loop() instead of passing loop directly
+                loop = asyncio.get_running_loop()
+                self.upnp = await UPnP.discover(loop=loop)
                 log.info("found upnp gateway: %s", self.upnp.gateway.manufacturer_string)
             except Exception as err:
                 log.warning("upnp discovery failed: %s", err)

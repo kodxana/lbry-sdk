@@ -31,7 +31,7 @@ expected_ranges = [
 
 class TestRouting(AsyncioTestCase):
     async def test_fill_one_bucket(self):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         peer_addresses = [
             (constants.generate_id(1), '1.2.3.1'),
             (constants.generate_id(2), '1.2.3.2'),
@@ -67,7 +67,7 @@ class TestRouting(AsyncioTestCase):
                 node.protocol.stop()
 
     async def test_cant_add_peer_without_a_node_id_gracefully(self):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         node = Node(loop, PeerManager(loop), constants.generate_id(), 4444, 4444, 3333, '1.2.3.4')
         bad_peer = make_kademlia_peer(None, '1.2.3.4', 5555)
         with self.assertLogs(level='WARNING') as logged:
@@ -77,7 +77,7 @@ class TestRouting(AsyncioTestCase):
 
 
     async def test_split_buckets(self):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         peer_addresses = [
             (constants.generate_id(1), '1.2.3.1'),
         ]

@@ -95,7 +95,7 @@ class WalletServerPayer:
         self.ledger = ledger
         self.wallet = wallet
         self.running = True
-        self.task = asyncio.ensure_future(self.pay())
+        self.task = asyncio.create_task(self.pay())
         self.task.add_done_callback(self._done_callback)
 
     def _done_callback(self, f):

@@ -34,7 +34,7 @@ def save_sample(name: str, samples: Iterable[str]):
 
 async def main():
     samples = set()
-    futs = [asyncio.ensure_future(sample_prefix(bytes([i]))) for i in range(256)]
+    futs = [asyncio.create_task(sample_prefix(bytes([i]))) for i in range(256)]
     for i, completed in enumerate(asyncio.as_completed(futs)):
         samples.update(await completed)
         print(i, len(samples))
