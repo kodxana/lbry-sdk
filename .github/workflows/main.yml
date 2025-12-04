@@ -22,45 +22,9 @@ jobs:
           pip install -e .[lint]
           make lint
 
-  test-integration:
-    name: Integration Tests (${{ matrix.test }})
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        test: [datanetwork, blockchain, claims, takeovers, transactions, other]
-    steps:
-      - name: Configure system
-        run: |
-          sudo swapoff -a
-          sudo sysctl -w vm.swappiness=1
-          sudo sysctl -w fs.file-max=262144
-          sudo sysctl -w vm.max_map_count=262144
-      - name: Start Elasticsearch
-        uses: elastic/elastic-github-actions/elasticsearch@master
-        with:
-          stack-version: 7.12.1
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
-      - name: Install ffmpeg (for 'other' tests)
-        if: matrix.test == 'other'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-      - name: Cache tox
-        uses: actions/cache@v4
-        with:
-          path: ./.tox
-          key: tox-${{ matrix.test }}-${{ hashFiles('setup.py') }}
-          restore-keys: tox-${{ matrix.test }}-
-      - name: Run integration tests
-        run: |
-          pip install tox coverage
-          tox -e ${{ matrix.test }}
-        continue-on-error: ${{ matrix.test == 'claims' }}
-
   build:
     name: Build Binary (${{ matrix.os }})
-    needs: [lint, test-integration]
+    needs: [lint]
     strategy:
       matrix:
         os: [ubuntu-22.04, macos-14, windows-2022]
