@@ -1,5 +1,11 @@
 name: ci
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  create:
+    tags:
+      - 'v*'
 
 jobs:
   lint:
