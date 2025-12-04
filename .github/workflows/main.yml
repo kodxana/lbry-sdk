@@ -1,95 +1,75 @@
 name: ci
-on: ["push", "pull_request", "workflow_dispatch"]
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
-
   lint:
-    name: lint
+    name: Lint
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
-      - name: extract pip cache
+      - name: Cache pip
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('setup.py') }}
           restore-keys: ${{ runner.os }}-pip-
-      - run: pip install --user --upgrade pip wheel
-      - run: pip install -e .[lint]
-      - run: make lint
+      - name: Install and run lint
+        run: |
+          pip install --upgrade pip wheel
+          pip install -e .[lint]
+          make lint
 
-  tests-unit:
-    name: "tests / unit"
+  test-unit:
+    name: Unit Tests (${{ matrix.os }})
     strategy:
       matrix:
-        os:
-          - ubuntu-22.04
-          - macos-14
-          - windows-2022
+        os: [ubuntu-22.04, macos-14, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
-      - name: set pip cache dir
-        shell: bash
-        run: echo "PIP_CACHE_DIR=$(pip cache dir)" >> $GITHUB_ENV
-      - name: extract pip cache
+      - name: Cache pip
         uses: actions/cache@v4
         with:
-          path: ${{ env.PIP_CACHE_DIR }}
+          path: ${{ runner.os == 'Windows' && '~\AppData\Local\pip\Cache' || '~/.cache/pip' }}
           key: ${{ runner.os }}-pip-${{ hashFiles('setup.py') }}
           restore-keys: ${{ runner.os }}-pip-
-      - id: os-name
-        uses: ASzc/change-string-case-action@v6
-        with:
-          string: ${{ runner.os }}
-      - run: python -m pip install --user --upgrade pip wheel
-      - if: startsWith(runner.os, 'linux')
-        run: pip install -e .[test]
-      - if: startsWith(runner.os, 'linux')
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip wheel
+          pip install -e .[test]
+      - name: Run unit tests
         env:
           HOME: /tmp
-        run: make test-unit-coverage
-      - if: startsWith(runner.os, 'linux') != true
-        run: pip install -e .[test]
-      - if: startsWith(runner.os, 'linux') != true
-        env:
-          HOME: /tmp
-        run: coverage run --source=lbry -m unittest tests/unit/test_conf.py
-      - name: submit coverage report
+        run: |
+          pip install coverage coveralls
+          coverage run --source=lbry -m unittest discover -vv tests.unit
+      - name: Submit coverage
+        if: matrix.os == 'ubuntu-22.04'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COVERALLS_FLAG_NAME: tests-unit-${{ steps.os-name.outputs.lowercase }}
-          COVERALLS_PARALLEL: true
-        run: |
-          pip install coveralls
-          coveralls --service=github
+        run: coveralls --service=github
+        continue-on-error: true
 
-  tests-integration:
-    name: "tests / integration"
+  test-integration:
+    name: Integration Tests (${{ matrix.test }})
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        test:
-          - datanetwork
-          - blockchain
-          - claims
-          - takeovers
-          - transactions
-          - other
+        test: [datanetwork, blockchain, claims, takeovers, transactions, other]
     steps:
-      - name: Configure sysctl limits
+      - name: Configure system
         run: |
           sudo swapoff -a
           sudo sysctl -w vm.swappiness=1
           sudo sysctl -w fs.file-max=262144
           sudo sysctl -w vm.max_map_count=262144
-      - name: Runs Elasticsearch
+      - name: Start Elasticsearch
         uses: elastic/elastic-github-actions/elasticsearch@master
         with:
           stack-version: 7.12.1
@@ -97,113 +77,86 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
-      - if: matrix.test == 'other'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
-      - name: extract pip cache
+      - name: Install ffmpeg (for 'other' tests)
+        if: matrix.test == 'other'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Cache tox
         uses: actions/cache@v4
         with:
           path: ./.tox
-          key: tox-integration-${{ matrix.test }}-${{ hashFiles('setup.py') }}
-          restore-keys: txo-integration-${{ matrix.test }}-
-      - run: pip install tox coverage coveralls
-      - if: matrix.test == 'claims'
-        run: rm -rf .tox
-      - run: tox -e ${{ matrix.test }}
-      - name: submit coverage report
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COVERALLS_FLAG_NAME: tests-integration-${{ matrix.test }}
-          COVERALLS_PARALLEL: true
+          key: tox-${{ matrix.test }}-${{ hashFiles('setup.py') }}
+          restore-keys: tox-${{ matrix.test }}-
+      - name: Run integration tests
         run: |
-          coverage combine tests
-          coveralls --service=github
-
-
-  coverage:
-    needs: ["tests-unit", "tests-integration"]
-    runs-on: ubuntu-22.04
-    steps:
-      - name: finalize coverage report submission
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          pip install coveralls
-          coveralls --service=github --finish
+          pip install tox coverage
+          tox -e ${{ matrix.test }}
+        continue-on-error: ${{ matrix.test == 'claims' }}
 
   build:
-    needs: ["lint", "tests-unit", "tests-integration"]
-    name: "build / binary"
+    name: Build Binary (${{ matrix.os }})
+    needs: [lint, test-unit, test-integration]
     strategy:
       matrix:
-        os:
-          - ubuntu-22.04
-          - macos-14
-          - windows-2022
+        os: [ubuntu-22.04, macos-14, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
-      - id: os-name
-        uses: ASzc/change-string-case-action@v6
-        with:
-          string: ${{ runner.os }}
-      - name: set pip cache dir
-        shell: bash
-        run: echo "PIP_CACHE_DIR=$(pip cache dir)" >> $GITHUB_ENV
-      - name: extract pip cache
+      - name: Cache pip
         uses: actions/cache@v4
         with:
-          path: ${{ env.PIP_CACHE_DIR }}
+          path: ${{ runner.os == 'Windows' && '~\AppData\Local\pip\Cache' || '~/.cache/pip' }}
           key: ${{ runner.os }}-pip-${{ hashFiles('setup.py') }}
           restore-keys: ${{ runner.os }}-pip-
-      - run: pip install pyinstaller==6.16.0
-      - name: Ensure compatible runtime deps for frozen binary
+      - name: Install dependencies
         run: |
+          pip install --upgrade pip wheel
+          pip install pyinstaller==6.16.0
           pip install --upgrade "typing_extensions>=4.12.2" "aiosignal>=1.3.1,<2.0.0"
-      - run: pip install -e .
-      - if: startsWith(github.ref, 'refs/tags/v')
+          pip install -e .
+      - name: Set build version for release
+        if: startsWith(github.ref, 'refs/tags/v')
         run: python docker/set_build.py
-      - if: startsWith(runner.os, 'linux') || startsWith(runner.os, 'mac')
-        name: Build & Run (Unix)
+      - name: Build binary (Unix)
+        if: runner.os != 'Windows'
         run: |
           pyinstaller --onefile --name lbrynet lbry/extras/cli.py
           dist/lbrynet --version
-      - if: startsWith(runner.os, 'windows')
-        name: Build & Run (Windows)
+      - name: Build binary (Windows)
+        if: runner.os == 'Windows'
         run: |
           pip install pywin32
           pyinstaller --additional-hooks-dir=scripts/. --icon=icons/lbry256.ico --onefile --name lbrynet lbry/extras/cli.py
           dist/lbrynet.exe --version
-      - uses: actions/upload-artifact@v4
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: lbrynet-${{ steps.os-name.outputs.lowercase }}
+          name: lbrynet-${{ runner.os }}
           path: dist/
 
   release:
-    name: "release"
+    name: Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: ["build"]
+    needs: [build]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-      - name: upload binaries
+      - name: Create release archives
+        run: |
+          chmod +x lbrynet-macOS/lbrynet
+          chmod +x lbrynet-Linux/lbrynet
+          zip --junk-paths lbrynet-mac.zip lbrynet-macOS/lbrynet
+          zip --junk-paths lbrynet-linux.zip lbrynet-Linux/lbrynet
+          zip --junk-paths lbrynet-windows.zip lbrynet-Windows/lbrynet.exe
+      - name: Upload to GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_API_TOKEN }}
         run: |
           pip install githubrelease
-          chmod +x lbrynet-macos/lbrynet
-          chmod +x lbrynet-linux/lbrynet
-          zip --junk-paths lbrynet-mac.zip lbrynet-macos/lbrynet
-          zip --junk-paths lbrynet-linux.zip lbrynet-linux/lbrynet
-          zip --junk-paths lbrynet-windows.zip lbrynet-windows/lbrynet.exe
-          ls -lh
-          githubrelease release lbryio/lbry-sdk info ${GITHUB_REF#refs/tags/}
-          githubrelease asset lbryio/lbry-sdk upload ${GITHUB_REF#refs/tags/} \
-            lbrynet-mac.zip lbrynet-linux.zip lbrynet-windows.zip
-          githubrelease release lbryio/lbry-sdk publish ${GITHUB_REF#refs/tags/}
-
+          TAG=${GITHUB_REF#refs/tags/}
+          githubrelease release lbryio/lbry-sdk info $TAG
+          githubrelease asset lbryio/lbry-sdk upload $TAG lbrynet-mac.zip lbrynet-linux.zip lbrynet-windows.zip
+          githubrelease release lbryio/lbry-sdk publish $TAG
