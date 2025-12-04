@@ -33,7 +33,7 @@ def now():
 
 
 def utcnow():
-    return datetime.datetime.utcnow()
+    return datetime.datetime.now(datetime.UTC)
 
 
 def isonow():
