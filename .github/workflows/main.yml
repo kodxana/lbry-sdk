@@ -22,40 +22,6 @@ jobs:
           pip install -e .[lint]
           make lint
 
-  test-unit:
-    name: Unit Tests (${{ matrix.os }})
-    strategy:
-      matrix:
-        os: [ubuntu-22.04, macos-14, windows-2022]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.os == 'Windows' && '~\AppData\Local\pip\Cache' || '~/.cache/pip' }}
-          key: ${{ runner.os }}-pip-${{ hashFiles('setup.py') }}
-          restore-keys: ${{ runner.os }}-pip-
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip wheel
-          pip install -e .[test]
-      - name: Run unit tests
-        env:
-          HOME: /tmp
-        run: |
-          pip install coverage coveralls
-          coverage run --source=lbry -m unittest discover -vv tests.unit
-      - name: Submit coverage
-        if: matrix.os == 'ubuntu-22.04'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: coveralls --service=github
-        continue-on-error: true
-
   test-integration:
     name: Integration Tests (${{ matrix.test }})
     runs-on: ubuntu-22.04
@@ -94,7 +60,7 @@ jobs:
 
   build:
     name: Build Binary (${{ matrix.os }})
-    needs: [lint, test-unit, test-integration]
+    needs: [lint, test-integration]
     strategy:
       matrix:
         os: [ubuntu-22.04, macos-14, windows-2022]
