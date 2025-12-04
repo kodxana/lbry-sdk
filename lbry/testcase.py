@@ -113,7 +113,7 @@ class AsyncioTestCase(unittest.TestCase):
             try:
                 skip_why = (getattr(self.__class__, '__unittest_skip_why__', '')
                             or getattr(testMethod, '__unittest_skip_why__', ''))
-                self._addSkip(result, self, skip_why)
+                result.addSkip(self, skip_why)
             finally:
                 result.stopTest(self)
             return
@@ -164,15 +164,16 @@ class AsyncioTestCase(unittest.TestCase):
             # The outcome reports results directly through the context managers
             if hasattr(outcome, 'skipped'):
                 for test, reason in outcome.skipped:
-                    self._addSkip(result, test, reason)
+                    result.addSkip(test, reason)
             if hasattr(outcome, 'errors'):
-                self._feedErrorsToResult(result, outcome.errors)
+                for test, exc_info in outcome.errors:
+                    result.addError(test, exc_info)
             if outcome.success:
                 if expecting_failure:
                     if hasattr(outcome, 'expectedFailure') and outcome.expectedFailure:
-                        self._addExpectedFailure(result, outcome.expectedFailure)
+                        result.addExpectedFailure(self, outcome.expectedFailure)
                     else:
-                        self._addUnexpectedSuccess(result)
+                        result.addUnexpectedSuccess(self)
                 else:
                     result.addSuccess(self)
             return result
