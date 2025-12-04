@@ -843,7 +843,11 @@ class Daemon(metaclass=JSONRPCServerType):
             raise web.GracefulExit()
 
         log.info("Shutting down lbrynet daemon")
-        asyncio.get_event_loop().call_later(0, shutdown)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+        loop.call_later(0, shutdown)
         return "Shutting down"
 
     async def jsonrpc_ffmpeg_find(self):
@@ -5144,7 +5148,11 @@ class Daemon(metaclass=JSONRPCServerType):
             (str) Success/Fail message or (dict) decoded data
         """
 
-        blob = await download_blob(asyncio.get_event_loop(), self.conf, self.blob_manager, self.dht_node, blob_hash)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+        blob = await download_blob(loop, self.conf, self.blob_manager, self.dht_node, blob_hash)
         if read:
             with blob.reader_context() as handle:
                 return handle.read().decode()

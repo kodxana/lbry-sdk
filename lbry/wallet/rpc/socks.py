@@ -312,7 +312,7 @@ class SOCKSProxy:
         """
         client = self.protocol(host, port, self.auth)
         sock = socket.socket()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             # A non-blocking socket is required by loop socket methods
             sock.setblocking(False)
@@ -418,7 +418,7 @@ class SOCKSProxy:
         Additionally raises SOCKSError if something goes wrong with
         the proxy handshake.
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         if resolve:
             infos = await loop.getaddrinfo(host, port, family=family,
                                            type=socket.SOCK_STREAM,

@@ -174,7 +174,7 @@ class StreamManager(SourceManager):
         if to_resume_saving:
             log.info("Resuming saving %i files", len(to_resume_saving))
             save_limit = getattr(self.config, 'stream_save_concurrency', self.DEFAULT_SAVE_CONCURRENCY)
-            self.resume_saving_task = asyncio.ensure_future(self._gather_limited(
+            self.resume_saving_task = asyncio.create_task(self._gather_limited(
                 (self._sources[sd_hash].save_file(file_name, download_directory)
                  for (file_name, download_directory, sd_hash) in to_resume_saving),
                 save_limit

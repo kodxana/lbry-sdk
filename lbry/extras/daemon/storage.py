@@ -350,8 +350,18 @@ class SQLiteStorage(SQLiteMixin):
         super().__init__(path)
         self.conf = conf
         self.content_claim_callbacks = {}
-        self.loop = loop or asyncio.get_event_loop()
+        self._loop = loop
         self.time_getter = time_getter or time.time
+
+    @property
+    def loop(self):
+        """Get the event loop, preferring the running loop if available."""
+        if self._loop:
+            return self._loop
+        try:
+            return asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.get_event_loop()
 
     async def run_and_return_one_or_none(self, query, *args):
         for row in await self.db.execute_fetchall(query, args):

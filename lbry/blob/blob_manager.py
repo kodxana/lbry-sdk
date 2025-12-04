@@ -110,7 +110,8 @@ class BlobManager:
                     continue
             return names
 
-        in_blobfiles_dir = await self.loop.run_in_executor(None, get_files_in_blob_dir)
+        loop = asyncio.get_running_loop()
+        in_blobfiles_dir = await loop.run_in_executor(None, get_files_in_blob_dir)
         to_add = await self.storage.sync_missing_blobs(in_blobfiles_dir)
         if to_add:
             self.completed_blob_hashes.update(to_add)
@@ -135,14 +136,18 @@ class BlobManager:
             raise Exception("Blob hash is None")
         if not blob.length:
             raise Exception("Blob has a length of 0")
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = self.loop
         if isinstance(blob, BlobFile):
             if blob.blob_hash not in self.completed_blob_hashes:
                 self.completed_blob_hashes.add(blob.blob_hash)
-            return self.loop.create_task(self.storage.add_blobs(
+            return loop.create_task(self.storage.add_blobs(
                 (blob.blob_hash, blob.length, blob.added_on, blob.is_mine), finished=True)
             )
         else:
-            return self.loop.create_task(self.storage.add_blobs(
+            return loop.create_task(self.storage.add_blobs(
                 (blob.blob_hash, blob.length, blob.added_on, blob.is_mine), finished=False)
             )
 

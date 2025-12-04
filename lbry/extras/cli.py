@@ -12,6 +12,11 @@ import logging.handlers
 import datetime
 from contextlib import suppress
 
+# Fix for multiprocessing in PyInstaller frozen executables
+import multiprocessing
+if getattr(sys, 'frozen', False):
+    multiprocessing.freeze_support()
+
 import aiohttp
 from aiohttp.web import GracefulExit
 from docopt import docopt
@@ -307,7 +312,8 @@ def setup_logging(logger: logging.Logger, args: argparse.Namespace, conf: Config
 
 
 def run_daemon(args: argparse.Namespace, conf: Config):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     if args.verbose is not None:
         loop.set_debug(True)
     if not args.no_logging:
@@ -393,4 +399,7 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    # Ensure multiprocessing support for frozen executables
+    if getattr(sys, 'frozen', False):
+        multiprocessing.freeze_support()
     sys.exit(main())

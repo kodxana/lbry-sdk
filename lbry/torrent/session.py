@@ -25,21 +25,16 @@ def _create_loop_event(loop: asyncio.AbstractEventLoop) -> asyncio.Event:
     """
     Create an asyncio.Event bound to the provided loop even when called from a
     thread where no event loop is currently running.
+
+    This is needed for libtorrent integration which may call from non-async threads.
     """
     if loop.is_running():
+        # If the loop is already running, schedule the event creation on it
         return asyncio.run_coroutine_threadsafe(_new_event(), loop).result()
-    try:
-        previous = asyncio.get_event_loop()
-    except RuntimeError:
-        previous = None
-    asyncio.set_event_loop(loop)
-    try:
+    else:
+        # If loop is not running, we can directly create the event
+        # Events in Python 3.10+ don't need explicit loop binding
         return asyncio.Event()
-    finally:
-        if previous is None:
-            asyncio.set_event_loop(None)
-        else:
-            asyncio.set_event_loop(previous)
 
 
 class TorrentHandle:
@@ -262,8 +257,9 @@ async def main():
     btih = "dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c"
 
     executor = None
-    session = TorrentSession(asyncio.get_event_loop(), executor)
-    session2 = TorrentSession(asyncio.get_event_loop(), executor)
+    loop = asyncio.get_running_loop()
+    session = TorrentSession(loop, executor)
+    session2 = TorrentSession(loop, executor)
     await session.bind('localhost', port=4040)
     await session2.bind('localhost', port=4041)
     btih = await session.add_fake_torrent()

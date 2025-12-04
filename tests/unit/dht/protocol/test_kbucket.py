@@ -23,7 +23,7 @@ def address_generator(address=(1, 2, 3, 4)):
 
 class TestKBucket(AsyncioTestCase):
     def setUp(self):
-        self.loop = asyncio.get_event_loop()
+        self.loop = asyncio.get_running_loop()
         self.address_generator = address_generator()
         self.peer_manager = PeerManager(self.loop)
         self.kbucket = KBucket(self.peer_manager, 0, 2 ** constants.HASH_BITS, generate_id())

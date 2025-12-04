@@ -18,8 +18,8 @@ class BasicTransactionTest(IntegrationTestCase):
 
         address1, address2 = await self.account.receiving.get_addresses(limit=2, only_usable=True)
         notifications = asyncio.create_task(asyncio.wait(
-            [asyncio.ensure_future(self.on_address_update(address1)),
-             asyncio.ensure_future(self.on_address_update(address2))]
+            [asyncio.create_task(self.on_address_update(address1)),
+             asyncio.create_task(self.on_address_update(address2))]
         ))
         await self.send_to_address_and_wait(address1, 5)
         await self.send_to_address_and_wait(address2, 5, 1)
@@ -47,14 +47,14 @@ class BasicTransactionTest(IntegrationTestCase):
         await stream_tx.sign([self.account])
 
         notifications = asyncio.create_task(asyncio.wait(
-            [asyncio.ensure_future(self.ledger.wait(channel_tx)), asyncio.ensure_future(self.ledger.wait(stream_tx))]
+            [asyncio.create_task(self.ledger.wait(channel_tx)), asyncio.create_task(self.ledger.wait(stream_tx))]
         ))
 
         await self.broadcast(channel_tx)
         await self.broadcast(stream_tx)
         await notifications
         notifications = asyncio.create_task(asyncio.wait(
-            [asyncio.ensure_future(self.ledger.wait(channel_tx)), asyncio.ensure_future(self.ledger.wait(stream_tx))]
+            [asyncio.create_task(self.ledger.wait(channel_tx)), asyncio.create_task(self.ledger.wait(stream_tx))]
         ))
         await self.generate(1)
         await notifications

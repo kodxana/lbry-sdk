@@ -10,7 +10,7 @@ from lbry.dht.peer import PeerManager, make_kademlia_peer
 
 class TestProtocol(AsyncioTestCase):
     async def test_ping(self):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         with dht_mocks.mock_network_loop(loop):
             node_id1 = constants.generate_id()
             peer1 = KademliaProtocol(
@@ -31,7 +31,7 @@ class TestProtocol(AsyncioTestCase):
             peer2.disconnect()
 
     async def test_update_token(self):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         with dht_mocks.mock_network_loop(loop):
             node_id1 = constants.generate_id()
             peer1 = KademliaProtocol(
@@ -53,7 +53,7 @@ class TestProtocol(AsyncioTestCase):
             peer2.disconnect()
 
     async def test_store_to_peer(self):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         with dht_mocks.mock_network_loop(loop):
             node_id1 = constants.generate_id()
             peer1 = KademliaProtocol(

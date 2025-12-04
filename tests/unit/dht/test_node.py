@@ -15,7 +15,7 @@ class TestBootstrapNode(AsyncioTestCase):
     TIMEOUT = 10.0  # do not increase. Hitting a timeout is a real failure
 
     async def test_bootstrap_node_adds_all_peers(self):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         loop.set_debug(False)
 
         with dht_mocks.mock_network_loop(loop):
@@ -42,7 +42,7 @@ class TestBootstrapNode(AsyncioTestCase):
 
 class TestNodePingQueueDiscover(AsyncioTestCase):
     async def test_ping_queue_discover(self):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         loop.set_debug(False)
 
         peer_addresses = [

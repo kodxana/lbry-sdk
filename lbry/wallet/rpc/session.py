@@ -53,12 +53,18 @@ class Connector:
         self.host = host
         self.port = port
         self.proxy = proxy
-        self.loop = kwargs.get('loop', asyncio.get_event_loop())
+        # Remove 'loop' from kwargs as it's deprecated
+        kwargs.pop('loop', None)
+        self.loop = None  # Will be set when connection is created
         self.kwargs = kwargs
 
     async def create_connection(self):
         """Initiate a connection."""
-        connector = self.proxy or self.loop
+        if self.proxy:
+            connector = self.proxy
+        else:
+            loop = asyncio.get_running_loop()
+            connector = loop
         return await connector.create_connection(
             self.session_factory, self.host, self.port, **self.kwargs)
 
@@ -88,7 +94,8 @@ class SessionBase(asyncio.Protocol):
 
     def __init__(self, *, framer=None, loop=None):
         self.framer = framer or self.default_framer()
-        self.loop = loop or asyncio.get_event_loop()
+        # Store loop parameter but prefer get_running_loop() when available
+        self._loop = loop
         self.logger = logging.getLogger(self.__class__.__name__)
         self.transport = None
         # Set when a connection is made
@@ -100,7 +107,7 @@ class SessionBase(asyncio.Protocol):
         self._can_send = Event()
         self._can_send.set()
         self._pm_task = None
-        self._task_group = TaskGroup(self.loop)
+        self._task_group = None  # Will be initialized when loop is available
         # Force-close a connection if a send doesn't succeed in this time
         self.max_send_delay = 60
         # Statistics.  The RPC object also keeps its own statistics.
@@ -113,6 +120,23 @@ class SessionBase(asyncio.Protocol):
         self.recv_size = 0
         self.last_recv = self.start_time
         self.last_packet_received = self.start_time
+
+    @property
+    def loop(self):
+        """Get the event loop, preferring the running loop if available."""
+        if self._loop:
+            return self._loop
+        try:
+            return asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.get_event_loop()
+
+    @property
+    def task_group(self):
+        """Lazy initialization of task group."""
+        if self._task_group is None:
+            self._task_group = TaskGroup(self.loop)
+        return self._task_group
 
     async def _limited_wait(self, secs):
         try:
@@ -186,7 +210,7 @@ class SessionBase(asyncio.Protocol):
         Tear down things done in connection_made."""
         self._address = None
         self.transport = None
-        self._task_group.cancel()
+        self.task_group.cancel()
         if self._pm_task:
             self._pm_task.cancel()
         # Release waiting tasks
@@ -277,7 +301,7 @@ class MessageSession(SessionBase):
             else:
                 self.last_recv = time.perf_counter()
                 self.recv_count += 1
-                await self._task_group.add(self._handle_message(message))
+                await self.task_group.add(self._handle_message(message))
 
     async def _handle_message(self, message):
         try:
@@ -425,7 +449,7 @@ class RPCSession(SessionBase):
                 self._bump_errors()
             else:
                 for request in requests:
-                    await self._task_group.add(self._handle_request(request))
+                    await self.task_group.add(self._handle_request(request))
 
     async def _handle_request(self, request):
         start = time.perf_counter()
@@ -531,13 +555,14 @@ class Server:
                  loop=None, **kwargs):
         self.host = host
         self.port = port
-        self.loop = loop or asyncio.get_event_loop()
+        self._loop = loop
         self.server = None
         self._session_factory = session_factory
         self._kwargs = kwargs
 
     async def listen(self):
-        self.server = await self.loop.create_server(
+        loop = self._loop if self._loop else asyncio.get_running_loop()
+        self.server = await loop.create_server(
             self._session_factory, self.host, self.port, **self._kwargs)
 
     async def close(self):

@@ -7,7 +7,7 @@ from lbry.testcase import AsyncioTestCase
 
 class PeerTest(AsyncioTestCase):
     def setUp(self):
-        self.loop = asyncio.get_event_loop()
+        self.loop = asyncio.get_running_loop()
         self.peer_manager = PeerManager(self.loop)
         self.node_ids = [generate_id(), generate_id(), generate_id()]
         self.first_contact = make_kademlia_peer(self.node_ids[1], '1.0.0.1', udp_port=1024)

@@ -7,7 +7,8 @@ from lbry.dht.node import Node
 from lbry.dht.peer import make_kademlia_peer, PeerManager
 from lbry.extras.daemon.storage import SQLiteStorage
 
-loop = asyncio.get_event_loop()
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 NODE = Node(
     loop, PeerManager(loop), generate_id(), 60600, 60600, 3333, None,
     storage=SQLiteStorage(None, ":memory:", loop, loop.time)
