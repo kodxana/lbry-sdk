@@ -142,8 +142,8 @@ of unittest discovery or CI, and uses only a temporary in-memory database.
 The `ci` workflow runs on pull requests, pushes to `master`, version tags, and
 manual dispatch. Linux lint, unit tests, and all six integration groups use the
 same container runner described above on Ubuntu 24.04. Windows 2022 and Intel
-macOS 15 run configuration and wallet-file tests natively using managed Python
-3.9.25; the full wallet unit suite remains part of the Linux job.
+macOS 15 run configuration tests and the full wallet unit suite natively using
+managed Python 3.9.25. The full wallet suite also runs in the Linux unit job.
 
 The native jobs build executables and check `--version`. A Linux build runs
 after the test jobs pass. Download `ci-*` artifacts for logs, package versions,
