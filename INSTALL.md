@@ -123,6 +123,11 @@ pip install -e .
 ```
 
 ## Run the tests
+
+For a contained Python 3.9 baseline on Linux or Windows with WSL2, see
+[the Docker test runner](docs/testing.md). It downloads its dependencies during
+the build, then runs tests without external network access or a mainnet node.
+
 ### Elasticsearch
 
 For running integration tests, Elasticsearch is required to be available at localhost:9200/
