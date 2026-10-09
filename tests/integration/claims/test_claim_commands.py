@@ -396,17 +396,27 @@ class ClaimSearchCommand(ClaimTestCase):
                     not_channel_ids=[chan2_id], has_channel_signature=True, valid_channel_signature=True)
         await match([], not_channel_ids=[chan1_id, chan2_id], has_channel_signature=True, valid_channel_signature=True)
 
-    @skip
-    async def test_no_source_and_valid_channel_signature_and_media_type(self):
-        await self.channel_create('@spam2', '1.0')
-        await self.stream_create('barrrrrr', '1.0', channel_name='@spam2', file_path=self.video_file_name)
-        paradox_no_source_claims = await self.claim_search(has_no_source=True, valid_channel_signature=True,
-                                                   media_type="video/mp4")
-        mp4_claims = await self.claim_search(media_type="video/mp4")
-        no_source_claims = await self.claim_search(has_no_source=True, valid_channel_signature=True)
-        self.assertEqual(0, len(paradox_no_source_claims))
-        self.assertEqual(1, len(no_source_claims))
-        self.assertEqual(1, len(mp4_claims))
+    async def test_source_signature_and_media_type_filters(self):
+        channel = await self.channel_create('@active')
+        channel_id = self.get_claim_id(channel)
+        video = await self.stream_create('signed-video', channel_id=channel_id, file_path=self.video_file_name)
+        no_source = await self.stream_create('signed-no-source', channel_id=channel_id, data=None)
+
+        abandoned_channel = await self.channel_create('@abandoned')
+        abandoned_channel_id = self.get_claim_id(abandoned_channel)
+        invalid_video = await self.stream_create(
+            'invalid-video', channel_id=abandoned_channel_id, file_path=self.video_file_name
+        )
+        await self.channel_abandon(abandoned_channel_id)
+
+        await self.assertFindsClaims(
+            [], has_no_source=True, valid_channel_signature=True, media_type='video/mp4'
+        )
+        await self.assertFindsClaims(
+            [video], has_source=True, valid_channel_signature=True, media_type='video/mp4'
+        )
+        await self.assertFindsClaims([invalid_video, video], media_type='video/mp4')
+        await self.assertFindsClaims([no_source, channel], has_no_source=True, valid_channel_signature=True)
 
     async def test_limit_claims_per_channel(self):
         match = self.assertFindsClaims
