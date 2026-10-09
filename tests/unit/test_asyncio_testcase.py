@@ -373,5 +373,6 @@ class TestAsyncioTestCase(unittest.TestCase):
             async def test_body(self):
                 await asyncio.sleep(0)
 
-        _, result = self.run_case(Case)
+        case, result = self.run_case(Case)
         self.assert_success(result)
+        self.assertTrue(case.loop.is_closed())

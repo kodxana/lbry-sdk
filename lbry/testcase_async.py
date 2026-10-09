@@ -63,7 +63,7 @@ class AsyncioTestCase(unittest.IsolatedAsyncioTestCase):
         await loop.shutdown_asyncgens()
 
     async def _await_with_timeout(self, awaitable):
-        loop = asyncio.get_running_loop()
+        loop = self.loop
         loop.slow_callback_duration = self.LOOP_SLOW_CALLBACK_DURATION
         timeout = self.TIMEOUT
         if not timeout:
