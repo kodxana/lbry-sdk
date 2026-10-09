@@ -21,11 +21,32 @@ sh scripts/test.sh smoke
 sh scripts/test.sh unit
 sh scripts/test.sh wallet
 sh scripts/test.sh integration
+sh scripts/test.sh lint
 ```
 
 The default is `smoke`: create a temporary regtest chain, mine test funds, and
 send transactions between accounts. It does not sync mainnet or use real funds.
 The unit and wallet commands do not start Elasticsearch.
+
+To retain logs, installed package versions, and a coverage XML report after a
+test run, set an output directory. Files are copied out after the container
+stops; the directory is not mounted into the container.
+
+```sh
+TEST_OUTPUT_DIR=ci-results sh scripts/test.sh unit
+TEST_OUTPUT_DIR=ci-results sh scripts/test.sh integration transactions
+```
+
+Use a different directory for each suite when retaining multiple reports. Logs
+and package versions are also exported on test failures and timeouts. A forced
+timeout can prevent Python from finishing its coverage report.
+
+The image also contains the pinned binary build tools. To build the Linux
+executable, check `--version`, and retain the result:
+
+```sh
+TEST_OUTPUT_DIR=ci-results sh scripts/test.sh build
+```
 
 Run one integration group or a specific test with:
 
@@ -92,3 +113,22 @@ If an interrupted native fixture download left an invalid video, remove
 `tests/integration/claims/files/ForBiggerEscapes.mp4` and run the fixture command
 again. A checksum mismatch fails explicitly rather than changing expected test
 results.
+
+## GitHub Actions
+
+The `ci` workflow runs on pull requests, pushes to `master`, version tags, and
+manual dispatch. Linux lint, unit tests, and all six integration groups use the
+same container runner described above on Ubuntu 24.04. Windows 2022 and Intel
+macOS 15 run configuration and wallet-file tests natively using managed Python
+3.9.25; the full wallet unit suite remains part of the Linux job.
+
+The native jobs build executables and check `--version`. A Linux build runs
+after the test jobs pass. Download `ci-*` artifacts for logs, package versions,
+and per-suite coverage XML; `lbrynet-*` artifacts contain the binaries. These
+artifacts expire after 14 days. Coveralls credentials are not needed.
+
+The workflow has read-only repository permissions and does not publish releases.
+Version tags run validation and produce artifacts only. The legacy Slack
+notification is restricted to the upstream repository. Release publishing and
+release validation are separate maintenance work; CI binaries still use the
+historical Python and dependency baseline.

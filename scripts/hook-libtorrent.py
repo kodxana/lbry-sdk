@@ -3,22 +3,17 @@ Hook for libtorrent.
 """
 
 import os
-import glob
-import os.path
-from PyInstaller.utils.hooks import get_module_file_attribute
+import sys
 from PyInstaller import compat
 
 
 def get_binaries():
     if compat.is_win:
-        files = ('c:/Windows/System32/libssl-1_1-x64.dll', 'c:/Windows/System32/libcrypto-1_1-x64.dll')
-        for file in files:
-            if not os.path.isfile(file):
-                print(f"MISSING {file}")
-        return [(file, '.') for file in files]
+        # The managed Python 3.9 runtime supplies the DLLs required by the
+        # libtorrent 2.0.6 wheel. Do not depend on a system OpenSSL installation.
+        files = ('libssl-1_1-x64.dll', 'libcrypto-1_1-x64.dll')
+        return [(os.path.join(sys.base_prefix, 'DLLs', file), '.') for file in files]
     return []
 
 
 binaries = get_binaries()
-for file in glob.glob(os.path.join(get_module_file_attribute('libtorrent'), 'libtorrent*pyd*')):
-    binaries.append((file, 'libtorrent'))

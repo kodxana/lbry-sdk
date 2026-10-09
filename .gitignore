@@ -19,4 +19,5 @@ trending*.log
 /lbry/wallet/bin
 
 /.vscode
+/ci-results
 /.gitignore

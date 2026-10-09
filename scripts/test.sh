@@ -2,14 +2,14 @@
 set -eu
 
 usage() {
-    echo "Usage: sh scripts/test.sh [smoke|unit|wallet|integration [group]|test <test names...>]"
+    echo "Usage: sh scripts/test.sh [smoke|unit|wallet|lint|build|integration [group]|test <test names...>]"
 }
 
 needs_elastic=false
 suite=${1:-smoke}
 if [ "$#" -gt 0 ]; then shift; fi
 case "$suite" in
-    smoke|unit|wallet)
+    smoke|unit|wallet|lint|build)
         if [ "$#" -ne 0 ]; then usage >&2; exit 2; fi
         case "$suite" in
             smoke)
@@ -18,6 +18,10 @@ case "$suite" in
                 ;;
             unit) set -- discover -v tests.unit ;;
             wallet) set -- discover -v tests.unit.wallet ;;
+            lint) set -- python -m pylint --rcfile=setup.cfg lbry ;;
+            build)
+                set -- sh -ec 'python -m PyInstaller --noconfirm --onefile --name lbrynet lbry/extras/cli.py; dist/lbrynet --version'
+                ;;
         esac
         ;;
     integration)
@@ -39,6 +43,21 @@ case "$suite" in
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
 esac
+
+if [ "$suite" != lint ] && [ "$suite" != build ]; then
+    if [ -n "${TEST_OUTPUT_DIR:-}" ]; then
+        set -- sh -c '
+            python -m coverage run --data-file=/tmp/.coverage --source=lbry -m unittest "$@"
+            test_result=$?
+            python -m coverage xml --data-file=/tmp/.coverage -o /tmp/coverage.xml
+            report_result=$?
+            if [ "$test_result" -ne 0 ]; then exit "$test_result"; fi
+            exit "$report_result"
+        ' tests "$@"
+    else
+        set -- python -m unittest "$@"
+    fi
+fi
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 run_dir=$(mktemp -d)
@@ -79,7 +98,28 @@ if [ "$needs_elastic" = true ]; then
 fi
 
 # Share only the isolated container's loopback network. No host ports or mounts.
+result=0
 docker run --init --platform linux/amd64 --cidfile "$run_dir/test.cid" \
     --network "$network" --memory 4g --cpus 4 --ulimit nofile=65536:65536 \
     "$sdk_image" timeout --kill-after=10s "${TEST_TIMEOUT:-3600}s" \
-    python -m unittest "$@"
+    "$@" || result=$?
+
+if [ -n "${TEST_OUTPUT_DIR:-}" ] && [ -s "$run_dir/test.cid" ]; then
+    mkdir -p "$TEST_OUTPUT_DIR"
+    test_id=$(cat "$run_dir/test.cid")
+    docker logs "$test_id" > "$TEST_OUTPUT_DIR/test.log" 2>&1
+    docker cp "$test_id:/opt/baseline-packages.txt" "$TEST_OUTPUT_DIR/packages.txt"
+    if [ "$suite" = build ]; then
+        artifact=/opt/lbry-sdk/dist/lbrynet
+    elif [ "$suite" != lint ]; then
+        artifact=/tmp/coverage.xml
+    else
+        artifact=
+    fi
+    if [ -n "$artifact" ]; then
+        docker cp "$test_id:$artifact" "$TEST_OUTPUT_DIR/" || {
+            if [ "$result" -eq 0 ]; then result=1; fi
+        }
+    fi
+fi
+exit "$result"

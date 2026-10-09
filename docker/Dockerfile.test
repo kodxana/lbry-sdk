@@ -6,16 +6,16 @@ RUN printf '%s\n' \
     > /etc/apt/sources.list \
     && apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
-COPY docker/test-constraints.txt /opt/test-constraints.txt
+COPY docker/test-constraints.txt docker/build-requirements.txt /opt/
 # Old PyYAML needs Cython 0.29 during its build; pkg_resources needs setuptools.
 RUN python -m pip install --no-cache-dir -c /opt/test-constraints.txt \
     pip setuptools wheel Cython
 
 WORKDIR /opt/lbry-sdk
-COPY setup.py README.md ./
+COPY setup.py setup.cfg README.md ./
 COPY lbry ./lbry
 RUN python -m pip install --no-cache-dir --no-build-isolation \
-    -c /opt/test-constraints.txt -e '.[test,hub]'
+    -c /opt/test-constraints.txt -r /opt/build-requirements.txt -e '.[test,hub,lint]'
 RUN orchstr8 download && echo \
     '8d85a3bade3e7c54596b1e4298101b23eb3788fda617b17a2bfd3d067a3f4017  lbry/wallet/bin/lbcd_0.22.100-rc.0_linux_amd64.tar.gz' \
     | sha256sum -c - && echo \
