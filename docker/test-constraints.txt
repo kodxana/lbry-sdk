@@ -40,11 +40,12 @@ pip==24.0
 platformdirs==4.4.0
 prometheus_client==0.7.1
 propcache==0.4.1
-protobuf==3.17.2
+protobuf==3.18.3
 pycparser==2.23
 pylint==2.13.9
 pyrsistent==0.20.0
 PyYAML==5.3.1
+rehash==1.0.0
 setuptools==75.8.0
 six==1.17.0
 tomli==2.5.0

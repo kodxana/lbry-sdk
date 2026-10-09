@@ -37,7 +37,7 @@ setup(
         'base58==1.0.0',
         'cffi==1.13.2',
         'cryptography==3.4.7',
-        'protobuf==3.17.2',
+        'protobuf==3.18.3',
         'prometheus_client==0.7.1',
         'ecdsa==0.13.3',
         'pyyaml==5.3.1',
@@ -57,7 +57,7 @@ setup(
             'jsonschema==4.4.0',
         ],
         'hub': [
-            'hub@git+https://github.com/lbryio/hub.git@929448d64bcbe6c5e476757ec78456beaa85e56a'
+            'hub@git+https://github.com/kodxana/scribe.git@7a9c9bd46ad38254ecf2c946ef8e76dd465ce359'
         ]
     },
     classifiers=[

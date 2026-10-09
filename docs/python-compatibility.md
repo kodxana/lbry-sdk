@@ -4,6 +4,12 @@ Audited October 9, 2026, at SDK revision
 `52f707043fdd6bcdeea1f3d937e16e6128476e45` and the Hub revision pinned in
 `setup.py`, `929448d64bcbe6c5e476757ec78456beaa85e56a`.
 
+The Hub baseline has since moved to the maintained fork at
+`7a9c9bd46ad38254ecf2c946ef8e76dd465ce359`, which includes upstream `ebcc6e5`.
+The SDK now shares its protobuf 3.18.3 requirement, and the test constraints pin
+Hub's additional `rehash==1.0.0` dependency. The findings below describe the
+original audit; these changes do not establish support for a newer interpreter.
+
 The Python 3.9 environment in [testing.md](testing.md) remains the tested
 comparison baseline. Updating the interpreter alone cannot install the current
 requirements on supported Python releases. The `python_requires='>=3.8'`
