@@ -5,6 +5,9 @@ newer Python versions is underway. It tests the current checkout, including
 uncommitted source changes. Python 3.9 and several dependencies are obsolete;
 this image is a test environment, not a deployment image.
 
+See the [Python compatibility audit](python-compatibility.md) for the known
+installation and runtime blockers and the proposed migration order.
+
 ## Requirements
 
 - Docker with Linux containers and BuildKit, on Linux or through WSL2 on Windows.
