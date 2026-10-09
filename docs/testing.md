@@ -114,6 +114,18 @@ If an interrupted native fixture download left an invalid video, remove
 again. A checksum mismatch fails explicitly rather than changing expected test
 results.
 
+## Stream restart tests
+
+The data-network suite tests interrupted and completed file saves separately.
+The interrupted-save test pauses the second blob read until stopping the file
+manager cancels it, verifies that the partial file is removed, then checks the
+complete contents after restart. The completed-save test verifies the saved
+path and contents after restart without waiting for a new write-start event.
+
+Save, stop, start, and write-event waits in these two tests have ten-second
+limits. Timeouts and cancellation propagate as test errors. A completed file
+loaded from the database does not need to emit another write-start event.
+
 ## Historical SQLite diagnostic
 
 The wallet unit suite checks batch writes through `AIOSQLite`, including
