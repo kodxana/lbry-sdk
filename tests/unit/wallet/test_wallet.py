@@ -181,17 +181,18 @@ class TestWalletCreation(AsyncioTestCase):
         config = {'data_path': '/tmp/wallet'}
         ledger = manager.get_or_create_ledger(Ledger.get_id(), config)
 
-        with tempfile.NamedTemporaryFile(suffix='.json') as wallet_file:
-            wallet_file.write(b'{"version": 1}')
-            wallet_file.seek(0)
+        with tempfile.TemporaryDirectory() as wallet_dir:
+            wallet_path = os.path.join(wallet_dir, 'wallet.json')
+            with open(wallet_path, 'w') as wallet_file:
+                wallet_file.write('{"version": 1}')
 
             # create and write wallet to a file
-            wallet = manager.import_wallet(wallet_file.name)
+            wallet = manager.import_wallet(wallet_path)
             account = wallet.generate_account(ledger)
             wallet.save()
 
             # read wallet from file
-            wallet_storage = WalletStorage(wallet_file.name)
+            wallet_storage = WalletStorage(wallet_path)
             wallet = Wallet.from_storage(wallet_storage, manager)
 
             self.assertEqual(account.public_key.address, wallet.default_account.public_key.address)
