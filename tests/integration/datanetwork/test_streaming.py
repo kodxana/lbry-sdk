@@ -1,9 +1,9 @@
 import os
 import hashlib
+from unittest import mock
 import aiohttp
 import aiohttp.web
 import asyncio
-import contextlib
 
 from lbry.file.source import ManagedDownloadSource
 from lbry.utils import aiohttp_request
@@ -22,6 +22,8 @@ def get_random_bytes(n: int) -> bytes:
 
 
 class RangeRequests(CommandTestCase):
+    FILE_OPERATION_TIMEOUT = 10
+
     async def _restart_stream_manager(self):
         await self.daemon.file_manager.stop()
         await self.daemon.file_manager.start()
@@ -344,35 +346,76 @@ class RangeRequests(CommandTestCase):
             self.assertEqual(self.data, f.read())
         await self.daemon.jsonrpc_file_delete(delete_from_download_dir=True, sd_hash=stream.sd_hash)
 
-    async def test_file_save_stop_before_finished_streaming_only(self, wait_for_start_writing=False):
-        await self.test_streaming_only_with_blobs()
+    async def _prepare_streaming_only_file_save(self):
+        await self._setup_stream(get_random_bytes((MAX_BLOB_SIZE - 1) * 2))
+        await self._test_range_requests()
         stream = (await self.daemon.jsonrpc_file_list())['items'][0]
         self.assertIsNone(stream.full_path)
         self.server.stop_server()
-        await self.daemon.jsonrpc_file_save('test', self.daemon.conf.data_dir)
-        stream = (await self.daemon.jsonrpc_file_list())['items'][0]
-        path = stream.full_path
-        self.assertIsNotNone(path)
-        if wait_for_start_writing:
-            with contextlib.suppress(asyncio.CancelledError):
-                await stream.started_writing.wait()
-            self.assertTrue(os.path.isfile(path))
-        await self.daemon.file_manager.stop()
-        # while stopped, we get no response to query and no file is present
-        self.assertEqual((await self.daemon.jsonrpc_file_list())['items'], [])
-        self.assertEqual(os.path.isfile(path), stream.status == ManagedDownloadSource.STATUS_FINISHED)
-        await self.daemon.file_manager.start()
-        # after restart, we get a response to query and same file path
-        stream = (await self.daemon.jsonrpc_file_list())['items'][0]
-        self.assertIsNotNone(stream.full_path)
-        self.assertEqual(stream.full_path, path)
-        if wait_for_start_writing:
-            with contextlib.suppress(asyncio.CancelledError):
-                await stream.started_writing.wait()
-            self.assertTrue(os.path.isfile(path))
+        return stream
 
-    async def test_file_save_stop_before_finished_streaming_only_wait_for_start(self):
-        return await self.test_file_save_stop_before_finished_streaming_only(wait_for_start_writing=True)
+    async def test_file_save_stop_before_finished_streaming_only(self):
+        stream = await self._prepare_streaming_only_file_save()
+        read_blob = stream.downloader.read_blob
+        second_blob_requested = asyncio.Event()
+        allow_second_blob = asyncio.Event()
+
+        async def pause_second_blob(blob_info, connection_id=0):
+            if blob_info.blob_num == 1:
+                second_blob_requested.set()
+                await allow_second_blob.wait()
+            return await read_blob(blob_info, connection_id)
+
+        # Keep the save incomplete until stop() cancels it. A fast disk must
+        # not turn this into a test of restarting an already-finished file.
+        with mock.patch.object(stream.downloader, 'read_blob', pause_second_blob):
+            await asyncio.wait_for(
+                self.daemon.jsonrpc_file_save('test', self.daemon.conf.data_dir), self.FILE_OPERATION_TIMEOUT
+            )
+            await asyncio.wait_for(stream.started_writing.wait(), self.FILE_OPERATION_TIMEOUT)
+            await asyncio.wait_for(second_blob_requested.wait(), self.FILE_OPERATION_TIMEOUT)
+            path = stream.full_path
+            self.assertIsNotNone(path)
+            self.assertEqual(stream.status, ManagedDownloadSource.STATUS_RUNNING)
+            self.assertFalse(stream.finished_writing.is_set())
+            with open(path, 'rb') as saved:
+                self.assertEqual(self.data[:MAX_BLOB_SIZE - 1], saved.read())
+
+            await asyncio.wait_for(self.daemon.file_manager.stop(), self.FILE_OPERATION_TIMEOUT)
+
+        self.assertEqual((await self.daemon.jsonrpc_file_list())['items'], [])
+        self.assertFalse(os.path.exists(path))
+        await asyncio.wait_for(self.daemon.file_manager.start(), self.FILE_OPERATION_TIMEOUT)
+        stream = (await self.daemon.jsonrpc_file_list())['items'][0]
+        self.assertEqual(stream.full_path, path)
+        await asyncio.wait_for(stream.started_writing.wait(), self.FILE_OPERATION_TIMEOUT)
+        await asyncio.wait_for(stream.finished_write_attempt.wait(), self.FILE_OPERATION_TIMEOUT)
+        self.assertTrue(stream.finished_writing.is_set())
+        self.assertEqual(stream.status, ManagedDownloadSource.STATUS_FINISHED)
+        with open(path, 'rb') as saved:
+            self.assertEqual(self.data, saved.read())
+
+    async def test_file_save_restart_after_finished_streaming_only(self):
+        stream = await self._prepare_streaming_only_file_save()
+        await asyncio.wait_for(
+            self.daemon.jsonrpc_file_save('test', self.daemon.conf.data_dir), self.FILE_OPERATION_TIMEOUT
+        )
+        await asyncio.wait_for(stream.finished_write_attempt.wait(), self.FILE_OPERATION_TIMEOUT)
+        self.assertTrue(stream.finished_writing.is_set())
+        self.assertEqual(stream.status, ManagedDownloadSource.STATUS_FINISHED)
+        path = stream.full_path
+        with open(path, 'rb') as saved:
+            self.assertEqual(self.data, saved.read())
+
+        await asyncio.wait_for(self.daemon.file_manager.stop(), self.FILE_OPERATION_TIMEOUT)
+        self.assertEqual((await self.daemon.jsonrpc_file_list())['items'], [])
+        self.assertTrue(os.path.isfile(path))
+        await asyncio.wait_for(self.daemon.file_manager.start(), self.FILE_OPERATION_TIMEOUT)
+        stream = (await self.daemon.jsonrpc_file_list())['items'][0]
+        self.assertEqual(stream.full_path, path)
+        self.assertEqual(stream.status, ManagedDownloadSource.STATUS_FINISHED)
+        with open(path, 'rb') as saved:
+            self.assertEqual(self.data, saved.read())
 
     async def test_file_save_streaming_only_dont_save_blobs(self):
         await self.test_streaming_only_without_blobs()
