@@ -74,6 +74,8 @@ jobs:
 
   native:
     name: tests and build / ${{ matrix.platform }}
+    env:
+      PYTHONFAULTHANDLER: "1"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
