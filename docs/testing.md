@@ -117,6 +117,34 @@ If an interrupted native fixture download left an invalid video, remove
 again. A checksum mismatch fails explicitly rather than changing expected test
 results.
 
+## Async test runner
+
+`AsyncioTestCase` and `AdvanceTimeTestCase` remain available from `lbry.testcase`.
+Their implementation is in `lbry.testcase_async`, which imports only the standard
+library. The runner's own regressions can therefore run on newer Python before
+the SDK's dependency upgrades are complete:
+
+```sh
+python -m unittest -v tests.unit.test_asyncio_testcase
+```
+
+The runner delegates test results and loop ownership to
+`unittest.IsolatedAsyncioTestCase`. A final cleanup cancels remaining tasks and
+closes async generators, including the no-pending-task case that Python 3.9's
+runner skips. Two unittest invocation hooks add the SDK's
+timeout behavior and support existing `addCleanup` callbacks that return
+awaitables. CI exercises these hooks on Python 3.9, 3.12, 3.13, and 3.14; this
+does not establish full SDK support on the newer interpreters.
+
+Each async setup, test, teardown, and cleanup has its own `TIMEOUT` budget
+(120 seconds by default; zero disables it). Its deadline callback is removed
+when that phase finishes. Exceeding the budget reports `TimeoutError`, even if
+the coroutine catches cancellation and returns. Unrelated cancellation remains
+an error. Synchronous code and coroutines that never yield cannot be interrupted
+by these deadlines; the container runner's process timeout remains the outer
+limit. Deadlines measure real elapsed time, so advancing a virtual clock does
+not consume them, but their callbacks still require the loop to make progress.
+
 ## Stream restart tests
 
 The data-network suite tests interrupted and completed file saves separately.
