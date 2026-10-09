@@ -1,0 +1,15 @@
+**
+!setup.py
+!README.md
+!docker/
+!docker/test-constraints.txt
+!lbry/
+!lbry/**
+!tests/
+!tests/**
+**/__pycache__
+**/*.pyc
+lbry/wallet/bin
+lbry/blockchain
+tests/integration/claims/files
+tests/.coverage*

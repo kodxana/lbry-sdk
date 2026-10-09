@@ -1,0 +1,31 @@
+FROM python:3.9-bullseye@sha256:5bd3c295ffab8b738108c7705052086d78b036078d5605dfc51e328ab758cc07
+
+RUN printf '%s\n' \
+    'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20250801T000000Z/ bullseye main' \
+    'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20250801T000000Z/ bullseye-security main' \
+    > /etc/apt/sources.list \
+    && apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+COPY docker/test-constraints.txt /opt/test-constraints.txt
+# Old PyYAML needs Cython 0.29 during its build; pkg_resources needs setuptools.
+RUN python -m pip install --no-cache-dir -c /opt/test-constraints.txt \
+    pip setuptools wheel Cython
+
+WORKDIR /opt/lbry-sdk
+COPY setup.py README.md ./
+COPY lbry ./lbry
+RUN python -m pip install --no-cache-dir --no-build-isolation \
+    -c /opt/test-constraints.txt -e '.[test,hub]'
+RUN orchstr8 download && echo \
+    '8d85a3bade3e7c54596b1e4298101b23eb3788fda617b17a2bfd3d067a3f4017  lbry/wallet/bin/lbcd_0.22.100-rc.0_linux_amd64.tar.gz' \
+    | sha256sum -c - && echo \
+    '970c9595227cd596ef3c6d9eafa350e2427aea9aea9f73f1aa733226389122ee  lbry/wallet/bin/lbcwallet_0.13.100-alpha.0_linux_amd64.tar.gz' \
+    | sha256sum -c -
+COPY tests ./tests
+RUN python -m tests.integration.claims.fixtures
+RUN python -m pip freeze > /opt/baseline-packages.txt \
+    && useradd --create-home --uid 1000 sdk \
+    && chown -R sdk:sdk /opt/lbry-sdk
+USER sdk
+ENV PYTHONUNBUFFERED=1
+CMD ["python", "-m", "unittest", "discover", "-v", "tests.unit"]

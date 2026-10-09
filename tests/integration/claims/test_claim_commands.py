@@ -4,8 +4,9 @@ import logging
 import asyncio
 from binascii import unhexlify
 from unittest import skip
-from urllib.request import urlopen
 import ecdsa
+
+from .fixtures import prepare_video
 
 from lbry.error import InsufficientFundsError
 
@@ -45,7 +46,6 @@ def verify(channel, data, signature, channel_hash=None):
 class ClaimTestCase(CommandTestCase):
 
     files_directory = os.path.join(os.path.dirname(__file__), 'files')
-    video_file_url = 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4'
     video_file_name = os.path.join(files_directory, 'ForBiggerEscapes.mp4')
     image_data = unhexlify(
         b'89504e470d0a1a0a0000000d49484452000000050000000708020000004fc'
@@ -55,13 +55,7 @@ class ClaimTestCase(CommandTestCase):
     )
 
     def setUp(self):
-        if not os.path.exists(self.video_file_name):
-            if not os.path.exists(self.files_directory):
-                os.mkdir(self.files_directory)
-            log.info(f'downloading test video from {self.video_file_name}')
-            with urlopen(self.video_file_url) as response, \
-                    open(self.video_file_name, 'wb') as video_file:
-                video_file.write(response.read())
+        prepare_video()
 
 
 class ClaimSearchCommand(ClaimTestCase):
