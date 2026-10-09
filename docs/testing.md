@@ -114,6 +114,29 @@ If an interrupted native fixture download left an invalid video, remove
 again. A checksum mismatch fails explicitly rather than changing expected test
 results.
 
+## Historical SQLite diagnostic
+
+The wallet unit suite checks batch writes through `AIOSQLite`, including
+concurrent generator inputs, supported parameter types, rollback after binding
+and constraint errors, and successful writes after an error. The batch-write
+fixture closes its database and executors during cleanup.
+
+The old `TestSQLiteRace` case exercised raw CPython SQLite and required a
+historical binding error to occur. It could fail or time out when that error did
+not occur. The reproducer is now a standalone, standard-library-only diagnostic:
+
+```sh
+python scripts/diagnose_sqlite_misuse.py --attempts 120000 --timeout 120
+python scripts/diagnose_sqlite_misuse.py --attempts 120000 --timeout 120 --fetchall
+```
+
+The second command drains each cursor on the worker thread, matching the SDK's
+existing workaround. Both commands print the Python and SQLite versions and
+whether the historical error was observed. Reaching either limit without
+reproducing it is inconclusive, not a failing SDK test. These diagnostic outcomes
+exit successfully; unexpected exceptions still fail. The diagnostic is not part
+of unittest discovery or CI, and uses only a temporary in-memory database.
+
 ## GitHub Actions
 
 The `ci` workflow runs on pull requests, pushes to `master`, version tags, and
