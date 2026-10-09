@@ -310,9 +310,5 @@ class WalletStorage:
             mode = os.stat(self.path).st_mode
         else:
             mode = stat.S_IREAD | stat.S_IWRITE
-        try:
-            os.rename(temp_path, self.path)
-        except Exception:  # pylint: disable=broad-except
-            os.remove(self.path)
-            os.rename(temp_path, self.path)
-        os.chmod(self.path, mode)
+        os.chmod(temp_path, mode)
+        os.replace(temp_path, self.path)
