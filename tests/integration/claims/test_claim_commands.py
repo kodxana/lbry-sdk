@@ -3,7 +3,6 @@ import tempfile
 import logging
 import asyncio
 from binascii import unhexlify
-from unittest import skip
 import ecdsa
 
 from .fixtures import prepare_video
@@ -13,6 +12,7 @@ from lbry.error import InsufficientFundsError
 from lbry.extras.daemon.daemon import DEFAULT_PAGE_SIZE
 from lbry.testcase import CommandTestCase
 from lbry.wallet.orchstr8.node import SPVNode
+from lbry.wallet.rpc import RPCError
 from lbry.wallet.transaction import Transaction, Output
 from lbry.wallet.util import satoshis_to_coins as lbc
 from lbry.crypto.hash import sha256
@@ -108,25 +108,40 @@ class ClaimSearchCommand(ClaimTestCase):
                 f"(expected {claim['outputs'][0]['name']}) != (got {result['name']})"
             )
 
-    @skip("doesnt happen on ES...?")
-    async def test_disconnect_on_memory_error(self):
-        claim_ids = [
-            '0000000000000000000000000000000000000000',
-        ] * 23828
-        self.assertListEqual([], await self.claim_search(claim_ids=claim_ids))
+    async def test_claim_search_claim_id_limit(self):
+        claim = await self.stream_create('searchable')
+        claim_id = self.get_claim_id(claim)
+        # The pinned Hub accepts at most 2,048 values in a search parameter.
+        claim_ids = [claim_id] + [f'{i:040x}' for i in range(2047)]
+        client = self.ledger.network.client
+        await asyncio.wait_for(self.assertFindsClaim(claim, claim_ids=claim_ids), 10)
 
-        # this should do nothing... if the resolve (which is retried) results in the server disconnecting,
-        # it kerplodes
-        await asyncio.wait_for(self.daemon.jsonrpc_resolve([
-            f'0000000000000000000000000000000000000000{i}' for i in range(30000)
-        ]), 30)
+        with self.assertRaisesRegex(RPCError, 'claim_ids cant have more than 2048 items') as raised:
+            await asyncio.wait_for(self.claim_search(claim_ids=claim_ids + [f'{2047:040x}']), 10)
+        self.assertEqual(1, raised.exception.code)
 
-        # 23829 claim ids makes the request just large enough
-        claim_ids = [
-            '0000000000000000000000000000000000000000',
-        ] * 33829
-        with self.assertRaises(ConnectionResetError):
-            await self.claim_search(claim_ids=claim_ids)
+        await asyncio.wait_for(self.assertFindsClaim(claim, claim_ids=[claim_id]), 10)
+        self.assertIs(client, self.ledger.network.client)
+        self.assertFalse(client.is_closing())
+
+    async def test_resolve_multiple_batches(self):
+        urls = [f'lbry://missing-{i}' for i in range(201)]
+        expected_claims = {}
+        # Include a real claim in each of the SDK's three 100-URL batches.
+        for index in (0, 100, 200):
+            name = f'resolved-{index}'
+            claim = await self.stream_create(name)
+            url = f'lbry://{name}'
+            urls[index] = url
+            expected_claims[url] = self.get_claim_id(claim)
+
+        results = await asyncio.wait_for(self.out(self.daemon.jsonrpc_resolve(urls)), 30)
+        self.assertEqual(set(urls), set(results))
+        for url in urls:
+            if url in expected_claims:
+                self.assertEqual(expected_claims[url], results[url]['claim_id'])
+            else:
+                self.assertEqual('NOT_FOUND', results[url]['error']['name'])
 
     async def test_basic_claim_search(self):
         await self.create_channel()
@@ -396,17 +411,27 @@ class ClaimSearchCommand(ClaimTestCase):
                     not_channel_ids=[chan2_id], has_channel_signature=True, valid_channel_signature=True)
         await match([], not_channel_ids=[chan1_id, chan2_id], has_channel_signature=True, valid_channel_signature=True)
 
-    @skip
-    async def test_no_source_and_valid_channel_signature_and_media_type(self):
-        await self.channel_create('@spam2', '1.0')
-        await self.stream_create('barrrrrr', '1.0', channel_name='@spam2', file_path=self.video_file_name)
-        paradox_no_source_claims = await self.claim_search(has_no_source=True, valid_channel_signature=True,
-                                                   media_type="video/mp4")
-        mp4_claims = await self.claim_search(media_type="video/mp4")
-        no_source_claims = await self.claim_search(has_no_source=True, valid_channel_signature=True)
-        self.assertEqual(0, len(paradox_no_source_claims))
-        self.assertEqual(1, len(no_source_claims))
-        self.assertEqual(1, len(mp4_claims))
+    async def test_source_signature_and_media_type_filters(self):
+        channel = await self.channel_create('@active')
+        channel_id = self.get_claim_id(channel)
+        video = await self.stream_create('signed-video', channel_id=channel_id, file_path=self.video_file_name)
+        no_source = await self.stream_create('signed-no-source', channel_id=channel_id, data=None)
+
+        abandoned_channel = await self.channel_create('@abandoned')
+        abandoned_channel_id = self.get_claim_id(abandoned_channel)
+        invalid_video = await self.stream_create(
+            'invalid-video', channel_id=abandoned_channel_id, file_path=self.video_file_name
+        )
+        await self.channel_abandon(abandoned_channel_id)
+
+        await self.assertFindsClaims(
+            [], has_no_source=True, valid_channel_signature=True, media_type='video/mp4'
+        )
+        await self.assertFindsClaims(
+            [video], has_source=True, valid_channel_signature=True, media_type='video/mp4'
+        )
+        await self.assertFindsClaims([invalid_video, video], media_type='video/mp4')
+        await self.assertFindsClaims([no_source, channel], has_no_source=True, valid_channel_signature=True)
 
     async def test_limit_claims_per_channel(self):
         match = self.assertFindsClaims

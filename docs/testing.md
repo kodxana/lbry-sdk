@@ -126,6 +126,18 @@ Save, stop, start, and write-event waits in these two tests have ten-second
 limits. Timeouts and cancellation propagate as test errors. A completed file
 loaded from the database does not need to emit another write-start event.
 
+## Claim search and resolve tests
+
+The claims suite checks the pinned Hub's 2,048-ID search limit. A request at the
+limit returns the expected claim; one above it reports an RPC error and leaves
+the same connection usable. The resolve test checks every result across three
+request batches, including existing claims and missing names. These replace
+the skipped test that expected large search requests to disconnect the client.
+
+The combined source, signature, and media-type filter test is also enabled. It
+checks claim identities using a signed video, a signed stream without a source,
+and a video whose signing channel has been abandoned.
+
 ## Historical SQLite diagnostic
 
 The wallet unit suite checks batch writes through `AIOSQLite`, including
