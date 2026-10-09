@@ -1,206 +1,149 @@
 name: ci
-on: ["push", "pull_request", "workflow_dispatch"]
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
-
-  lint:
-    name: lint
-    runs-on: ubuntu-20.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.9'
-      - name: extract pip cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('setup.py') }}
-          restore-keys: ${{ runner.os }}-pip-
-      - run: pip install --user --upgrade pip wheel
-      - run: pip install -e .[lint]
-      - run: make lint
-
-  tests-unit:
-    name: "tests / unit"
+  linux-tests:
+    name: tests / linux / ${{ matrix.suite }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     strategy:
+      fail-fast: false
       matrix:
-        os:
-          - ubuntu-20.04
-          - macos-13
-          - windows-2022
+        suite: [lint, unit, blockchain, claims, datanetwork, other, takeovers, transactions]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Configure Elasticsearch mmap limit
+        if: matrix.suite != 'lint' && matrix.suite != 'unit'
+        run: sudo sysctl -w vm.max_map_count=262144
+      - name: Run baseline suite
+        env:
+          SUITE: ${{ matrix.suite }}
+          TEST_OUTPUT_DIR: ci-results
+          TEST_TIMEOUT: '1800'
+        run: |
+          case "$SUITE" in
+            lint|unit) sh scripts/test.sh "$SUITE" ;;
+            *) sh scripts/test.sh integration "$SUITE" ;;
+          esac
+      - name: Upload logs and coverage
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-linux-${{ matrix.suite }}
+          path: ci-results/
+          retention-days: 14
+
+  native:
+    name: tests and build / ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.9'
-      - name: set pip cache dir
-        shell: bash
-        run: echo "PIP_CACHE_DIR=$(pip cache dir)" >> $GITHUB_ENV
-      - name: extract pip cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.PIP_CACHE_DIR }}
-          key: ${{ runner.os }}-pip-${{ hashFiles('setup.py') }}
-          restore-keys: ${{ runner.os }}-pip-
-      - id: os-name
-        uses: ASzc/change-string-case-action@v6
-        with:
-          string: ${{ runner.os }}
-      - run: python -m pip install --user --upgrade pip wheel
-      - if: startsWith(runner.os, 'linux')
-        run: pip install -e .[test]
-      - if: startsWith(runner.os, 'linux')
-        env:
-          HOME: /tmp
-        run: make test-unit-coverage
-      - if: startsWith(runner.os, 'linux') != true
-        run: pip install -e .[test]
-      - if: startsWith(runner.os, 'linux') != true
-        env:
-          HOME: /tmp
-        run: coverage run --source=lbry -m unittest tests/unit/test_conf.py
-      - name: submit coverage report
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COVERALLS_FLAG_NAME: tests-unit-${{ steps.os-name.outputs.lowercase }}
-          COVERALLS_PARALLEL: true
-        run: |
-          pip install coveralls
-          coveralls --service=github
-
-  tests-integration:
-    name: "tests / integration"
-    runs-on: ubuntu-20.04
+    timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
-        test:
-          - datanetwork
-          - blockchain
-          - claims
-          - takeovers
-          - transactions
-          - other
+        include:
+          - os: windows-2022
+            platform: windows
+          - os: macos-15-intel
+            platform: macos
     steps:
-      - name: Configure sysctl limits
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: '0.12.24'
+          python-version: '3.9.25'
+          python-arch: x86_64
+          activate-environment: true
+          enable-cache: true
+          cache-dependency-glob: |
+            setup.py
+            docker/test-constraints.txt
+            docker/build-requirements.txt
+      - name: Install baseline dependencies
         run: |
-          sudo swapoff -a
-          sudo sysctl -w vm.swappiness=1
-          sudo sysctl -w fs.file-max=262144
-          sudo sysctl -w vm.max_map_count=262144
-      - name: Runs Elasticsearch
-        uses: elastic/elastic-github-actions/elasticsearch@master
-        with:
-          stack-version: 7.12.1
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.9'
-      - if: matrix.test == 'other'
+          uv pip install -c docker/test-constraints.txt pip setuptools wheel Cython
+          python -m pip install --no-build-isolation -c docker/test-constraints.txt -r docker/build-requirements.txt -e '.[test]'
+          python -m pip check
+          mkdir -p ci-results
+          python -m pip freeze > ci-results/packages.txt
+      - name: Test configuration and wallet storage
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
-      - name: extract pip cache
-        uses: actions/cache@v4
-        with:
-          path: ./.tox
-          key: tox-integration-${{ matrix.test }}-${{ hashFiles('setup.py') }}
-          restore-keys: txo-integration-${{ matrix.test }}-
-      - run: pip install tox coverage coveralls
-      - if: matrix.test == 'claims'
-        run: rm -rf .tox
-      - run: tox -e ${{ matrix.test }}
-      - name: submit coverage report
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COVERALLS_FLAG_NAME: tests-integration-${{ matrix.test }}
-          COVERALLS_PARALLEL: true
+          python -m coverage run --source=lbry -m unittest -v tests.unit.test_conf tests.unit.wallet.test_wallet 2>&1 | tee ci-results/test.log
+      - name: Write coverage report
+        if: always()
+        run: python -m coverage xml -o ci-results/coverage.xml
+      - name: Build macOS binary
+        if: runner.os == 'macOS'
         run: |
-          coverage combine tests
-          coveralls --service=github
-
-
-  coverage:
-    needs: ["tests-unit", "tests-integration"]
-    runs-on: ubuntu-20.04
-    steps:
-      - name: finalize coverage report submission
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          pip install coveralls
-          coveralls --service=github --finish
-
-  build:
-    needs: ["lint", "tests-unit", "tests-integration"]
-    name: "build / binary"
-    strategy:
-      matrix:
-        os:
-          - ubuntu-20.04
-          - macos-13
-          - windows-2022
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.9'
-      - id: os-name
-        uses: ASzc/change-string-case-action@v6
-        with:
-          string: ${{ runner.os }}
-      - name: set pip cache dir
-        shell: bash
-        run: echo "PIP_CACHE_DIR=$(pip cache dir)" >> $GITHUB_ENV
-      - name: extract pip cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.PIP_CACHE_DIR }}
-          key: ${{ runner.os }}-pip-${{ hashFiles('setup.py') }}
-          restore-keys: ${{ runner.os }}-pip-
-      - run: pip install pyinstaller==6.0
-      - run: pip install -e .
-      - if: startsWith(github.ref, 'refs/tags/v')
-        run: python docker/set_build.py
-      - if: startsWith(runner.os, 'linux') || startsWith(runner.os, 'mac')
-        name: Build & Run (Unix)
-        run: |
-          pyinstaller --onefile --name lbrynet lbry/extras/cli.py
+          python -m PyInstaller --noconfirm --onefile --name lbrynet lbry/extras/cli.py
           dist/lbrynet --version
-      - if: startsWith(runner.os, 'windows')
-        name: Build & Run (Windows)
+      - name: Build Windows binary
+        if: runner.os == 'Windows'
         run: |
-          pip install pywin32==301
-          pyinstaller --additional-hooks-dir=scripts/. --icon=icons/lbry256.ico --onefile --name lbrynet lbry/extras/cli.py
+          python -m PyInstaller --noconfirm --additional-hooks-dir=scripts --icon=icons/lbry256.ico --onefile --name lbrynet lbry/extras/cli.py
           dist/lbrynet.exe --version
-      - uses: actions/upload-artifact@v4
+      - name: Upload binary
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: lbrynet-${{ steps.os-name.outputs.lowercase }}
-          path: dist/
+          name: lbrynet-${{ matrix.platform }}
+          path: dist/lbrynet*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload logs and coverage
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-${{ matrix.platform }}
+          path: ci-results/
+          retention-days: 14
 
-  release:
-    name: "release"
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: ["build"]
-    runs-on: ubuntu-20.04
+  build-linux:
+    name: build / linux
+    needs: [linux-tests, native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-      - name: upload binaries
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and check binary
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_API_TOKEN }}
-        run: |
-          pip install githubrelease
-          chmod +x lbrynet-macos/lbrynet
-          chmod +x lbrynet-linux/lbrynet
-          zip --junk-paths lbrynet-mac.zip lbrynet-macos/lbrynet
-          zip --junk-paths lbrynet-linux.zip lbrynet-linux/lbrynet
-          zip --junk-paths lbrynet-windows.zip lbrynet-windows/lbrynet.exe
-          ls -lh
-          githubrelease release lbryio/lbry-sdk info ${GITHUB_REF#refs/tags/}
-          githubrelease asset lbryio/lbry-sdk upload ${GITHUB_REF#refs/tags/} \
-            lbrynet-mac.zip lbrynet-linux.zip lbrynet-windows.zip
-          githubrelease release lbryio/lbry-sdk publish ${GITHUB_REF#refs/tags/}
-
+          TEST_OUTPUT_DIR: ci-results
+          TEST_TIMEOUT: '1200'
+        run: sh scripts/test.sh build
+      - name: Upload binary
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lbrynet-linux
+          path: ci-results/lbrynet
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-linux-build
+          path: |
+            ci-results/test.log
+            ci-results/packages.txt
+          retention-days: 14
