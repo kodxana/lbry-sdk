@@ -1,8 +1,10 @@
 **
 !setup.py
+!setup.cfg
 !README.md
 !docker/
 !docker/test-constraints.txt
+!docker/build-requirements.txt
 !lbry/
 !lbry/**
 !tests/
