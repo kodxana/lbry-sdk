@@ -3,7 +3,6 @@ import tempfile
 import logging
 import asyncio
 from binascii import unhexlify
-from unittest import skip
 import ecdsa
 
 from .fixtures import prepare_video
@@ -13,6 +12,7 @@ from lbry.error import InsufficientFundsError
 from lbry.extras.daemon.daemon import DEFAULT_PAGE_SIZE
 from lbry.testcase import CommandTestCase
 from lbry.wallet.orchstr8.node import SPVNode
+from lbry.wallet.rpc import RPCError
 from lbry.wallet.transaction import Transaction, Output
 from lbry.wallet.util import satoshis_to_coins as lbc
 from lbry.crypto.hash import sha256
@@ -108,25 +108,40 @@ class ClaimSearchCommand(ClaimTestCase):
                 f"(expected {claim['outputs'][0]['name']}) != (got {result['name']})"
             )
 
-    @skip("doesnt happen on ES...?")
-    async def test_disconnect_on_memory_error(self):
-        claim_ids = [
-            '0000000000000000000000000000000000000000',
-        ] * 23828
-        self.assertListEqual([], await self.claim_search(claim_ids=claim_ids))
+    async def test_claim_search_claim_id_limit(self):
+        claim = await self.stream_create('searchable')
+        claim_id = self.get_claim_id(claim)
+        # The pinned Hub accepts at most 2,048 values in a search parameter.
+        claim_ids = [claim_id] + [f'{i:040x}' for i in range(2047)]
+        client = self.ledger.network.client
+        await asyncio.wait_for(self.assertFindsClaim(claim, claim_ids=claim_ids), 10)
 
-        # this should do nothing... if the resolve (which is retried) results in the server disconnecting,
-        # it kerplodes
-        await asyncio.wait_for(self.daemon.jsonrpc_resolve([
-            f'0000000000000000000000000000000000000000{i}' for i in range(30000)
-        ]), 30)
+        with self.assertRaisesRegex(RPCError, 'claim_ids cant have more than 2048 items') as raised:
+            await asyncio.wait_for(self.claim_search(claim_ids=claim_ids + [f'{2047:040x}']), 10)
+        self.assertEqual(1, raised.exception.code)
 
-        # 23829 claim ids makes the request just large enough
-        claim_ids = [
-            '0000000000000000000000000000000000000000',
-        ] * 33829
-        with self.assertRaises(ConnectionResetError):
-            await self.claim_search(claim_ids=claim_ids)
+        await asyncio.wait_for(self.assertFindsClaim(claim, claim_ids=[claim_id]), 10)
+        self.assertIs(client, self.ledger.network.client)
+        self.assertFalse(client.is_closing())
+
+    async def test_resolve_multiple_batches(self):
+        urls = [f'lbry://missing-{i}' for i in range(201)]
+        expected_claims = {}
+        # Include a real claim in each of the SDK's three 100-URL batches.
+        for index in (0, 100, 200):
+            name = f'resolved-{index}'
+            claim = await self.stream_create(name)
+            url = f'lbry://{name}'
+            urls[index] = url
+            expected_claims[url] = self.get_claim_id(claim)
+
+        results = await asyncio.wait_for(self.out(self.daemon.jsonrpc_resolve(urls)), 30)
+        self.assertEqual(set(urls), set(results))
+        for url in urls:
+            if url in expected_claims:
+                self.assertEqual(expected_claims[url], results[url]['claim_id'])
+            else:
+                self.assertEqual('NOT_FOUND', results[url]['error']['name'])
 
     async def test_basic_claim_search(self):
         await self.create_channel()
