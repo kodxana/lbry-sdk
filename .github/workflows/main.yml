@@ -74,6 +74,8 @@ jobs:
 
   native:
     name: tests and build / ${{ matrix.platform }}
+    env:
+      PYTHONFAULTHANDLER: "1"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -109,6 +111,9 @@ jobs:
       - name: Test configuration
         run: |
           python -m coverage run --source=lbry -m unittest -v tests.unit.test_conf 2>&1 | tee ci-results/config-tests.log
+      - name: Test claim schemas
+        run: |
+          python -m coverage run --append --source=lbry -m unittest discover -v tests.unit.schema 2>&1 | tee ci-results/schema-tests.log
       - name: Test full wallet suite
         run: |
           python -m coverage run --append --source=lbry -m unittest discover -v tests.unit.wallet 2>&1 | tee ci-results/wallet-tests.log

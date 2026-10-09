@@ -15,7 +15,8 @@ WORKDIR /opt/lbry-sdk
 COPY setup.py setup.cfg README.md ./
 COPY lbry ./lbry
 RUN python -m pip install --no-cache-dir --no-build-isolation \
-    -c /opt/test-constraints.txt -r /opt/build-requirements.txt -e '.[test,hub,lint]'
+    -c /opt/test-constraints.txt -r /opt/build-requirements.txt -e '.[test,hub,lint]' \
+    && python -m pip check
 RUN orchstr8 download && echo \
     '8d85a3bade3e7c54596b1e4298101b23eb3788fda617b17a2bfd3d067a3f4017  lbry/wallet/bin/lbcd_0.22.100-rc.0_linux_amd64.tar.gz' \
     | sha256sum -c - && echo \
