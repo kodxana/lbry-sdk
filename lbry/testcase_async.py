@@ -1,142 +1,103 @@
 """Async test helpers that can run without SDK dependencies installed."""
 import asyncio
-from asyncio.runners import _cancel_all_tasks
 import functools
-from time import time
+import inspect
+from time import monotonic
 import unittest
-from unittest.case import _Outcome
 
 
-class AsyncioTestCase(unittest.TestCase):
-    # Implementation inspired by discussion:
-    #  https://bugs.python.org/issue32972
-
+class AsyncioTestCase(unittest.IsolatedAsyncioTestCase):
     LOOP_SLOW_CALLBACK_DURATION = 0.2
     TIMEOUT = 120.0
 
     maxDiff = None
 
-    async def asyncSetUp(self):  # pylint: disable=C0103
-        pass
+    def __init__(self, methodName='runTest'):
+        super().__init__(methodName)
+        # Registered first so user cleanups run before final resource shutdown.
+        self.addCleanup(self._shutdown_resources)
 
-    async def asyncTearDown(self):  # pylint: disable=C0103
-        pass
+    @functools.cached_property
+    def loop(self):
+        loop = asyncio.get_event_loop()
+        loop.slow_callback_duration = self.LOOP_SLOW_CALLBACK_DURATION
+        return loop
 
-    def run(self, result=None):  # pylint: disable=R0915
-        orig_result = result
-        if result is None:
-            result = self.defaultTestResult()
-            startTestRun = getattr(result, 'startTestRun', None)  # pylint: disable=C0103
-            if startTestRun is not None:
-                startTestRun()
+    def _callAsync(self, function, /, *args, **kwargs):
+        async def run():
+            return await self._await_with_timeout(function(*args, **kwargs))
 
-        result.startTest(self)
+        return super()._callAsync(run)
 
-        testMethod = getattr(self, self._testMethodName)  # pylint: disable=C0103
-        if (getattr(self.__class__, "__unittest_skip__", False) or
-                getattr(testMethod, "__unittest_skip__", False)):
-            # If the class or method was skipped.
-            try:
-                skip_why = (getattr(self.__class__, '__unittest_skip_why__', '')
-                            or getattr(testMethod, '__unittest_skip_why__', ''))
-                self._addSkip(result, self, skip_why)
-            finally:
-                result.stopTest(self)
-            return
-        expecting_failure_method = getattr(testMethod,
-                                           "__unittest_expecting_failure__", False)
-        expecting_failure_class = getattr(self,
-                                          "__unittest_expecting_failure__", False)
-        expecting_failure = expecting_failure_class or expecting_failure_method
-        outcome = _Outcome(result)
+    def _callMaybeAsync(self, function, /, *args, **kwargs):
+        if inspect.iscoroutinefunction(function):
+            return self._callAsync(function, *args, **kwargs)
+        result = super()._callMaybeAsync(function, *args, **kwargs)
+        # Existing addCleanup callers include lambdas and callable objects
+        # that return awaitables rather than being coroutine functions.
+        if inspect.isawaitable(result):
+            async def await_result():
+                return await result
+            return self._callAsync(await_result)
+        return result
 
-        self.loop = asyncio.new_event_loop()  # pylint: disable=W0201
-        asyncio.set_event_loop(self.loop)
-        self.loop.set_debug(True)
-        self.loop.slow_callback_duration = self.LOOP_SLOW_CALLBACK_DURATION
+    @staticmethod
+    async def _shutdown_resources():
+        # Python 3.9's IsolatedAsyncioTestCase skips shutdown_asyncgens when
+        # no pending tasks remain. Close generators consistently on every
+        # supported interpreter, after cancelling any tasks using them.
+        loop = asyncio.get_running_loop()
+        current = asyncio.current_task()
+        pending = [task for task in asyncio.all_tasks() if task is not current]
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        for task in pending:
+            if not task.cancelled() and task.exception() is not None:
+                loop.call_exception_handler({
+                    'message': 'Unhandled exception during async test shutdown',
+                    'exception': task.exception(),
+                    'task': task,
+                })
+        await loop.shutdown_asyncgens()
 
-        try:
-            self._outcome = outcome
+    async def _await_with_timeout(self, awaitable):
+        loop = asyncio.get_running_loop()
+        loop.slow_callback_duration = self.LOOP_SLOW_CALLBACK_DURATION
+        timeout = self.TIMEOUT
+        if not timeout:
+            return await awaitable
 
-            with outcome.testPartExecutor(self):
-                self.setUp()
-                self.add_timeout()
-                self.loop.run_until_complete(self.asyncSetUp())
-            if outcome.success:
-                outcome.expecting_failure = expecting_failure
-                with outcome.testPartExecutor(self, isTest=True):
-                    maybe_coroutine = testMethod()
-                    if asyncio.iscoroutine(maybe_coroutine):
-                        self.add_timeout()
-                        self.loop.run_until_complete(maybe_coroutine)
-                outcome.expecting_failure = False
-                with outcome.testPartExecutor(self):
-                    self.add_timeout()
-                    self.loop.run_until_complete(self.asyncTearDown())
-                    self.tearDown()
+        task = asyncio.current_task()
+        deadline = monotonic() + timeout
+        expired = False
 
-            self.doAsyncCleanups()
-
-            try:
-                _cancel_all_tasks(self.loop)
-                self.loop.run_until_complete(self.loop.shutdown_asyncgens())
-            finally:
-                asyncio.set_event_loop(None)
-                self.loop.close()
-
-            for test, reason in outcome.skipped:
-                self._addSkip(result, test, reason)
-            self._feedErrorsToResult(result, outcome.errors)
-            if outcome.success:
-                if expecting_failure:
-                    if outcome.expectedFailure:
-                        self._addExpectedFailure(result, outcome.expectedFailure)
-                    else:
-                        self._addUnexpectedSuccess(result)
-                else:
-                    result.addSuccess(self)
-            return result
-        finally:
-            result.stopTest(self)
-            if orig_result is None:
-                stopTestRun = getattr(result, 'stopTestRun', None)  # pylint: disable=C0103
-                if stopTestRun is not None:
-                    stopTestRun()  # pylint: disable=E1102
-
-            # explicitly break reference cycles:
-            # outcome.errors -> frame -> outcome -> outcome.errors
-            # outcome.expectedFailure -> frame -> outcome -> outcome.expectedFailure
-            outcome.errors.clear()
-            outcome.expectedFailure = None
-
-            # clear the outcome, no more needed
-            self._outcome = None
-
-    def doAsyncCleanups(self):  # pylint: disable=C0103
-        outcome = self._outcome or _Outcome()
-        while self._cleanups:
-            function, args, kwargs = self._cleanups.pop()
-            with outcome.testPartExecutor(self):
-                maybe_coroutine = function(*args, **kwargs)
-                if asyncio.iscoroutine(maybe_coroutine):
-                    self.add_timeout()
-                    self.loop.run_until_complete(maybe_coroutine)
-
-    def cancel(self):
-        for task in asyncio.all_tasks(self.loop):
-            if not task.done():
-                task.print_stack()
+        def check_deadline():
+            nonlocal handle, expired
+            remaining = deadline - monotonic()
+            if remaining > 0:
+                # AdvanceTimeTestCase changes loop.time(). Advancing its
+                # virtual clock must not consume the real-time timeout.
+                handle = loop.call_later(remaining, check_deadline)
+            else:
+                expired = True
                 task.cancel()
 
-    def add_timeout(self):
-        if self.TIMEOUT:
-            self.loop.call_later(self.TIMEOUT, self.check_timeout, time())
-
-    def check_timeout(self, started):
-        if time() - started >= self.TIMEOUT:
-            self.cancel()
-        else:
-            self.loop.call_later(self.TIMEOUT, self.check_timeout, started)
+        handle = loop.call_later(timeout, check_deadline)
+        try:
+            # Await in unittest's task so ContextVars survive between phases.
+            result = await awaitable
+        except asyncio.CancelledError as error:
+            if not expired:
+                raise
+            raise asyncio.TimeoutError(f'Async test phase exceeded {timeout} seconds') from error
+        finally:
+            handle.cancel()
+        if expired:
+            # A coroutine that catches cancellation still exceeded its limit.
+            raise asyncio.TimeoutError(f'Async test phase exceeded {timeout} seconds')
+        return result
 
 
 class AdvanceTimeTestCase(AsyncioTestCase):

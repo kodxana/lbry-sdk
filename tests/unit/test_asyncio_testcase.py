@@ -308,11 +308,52 @@ class TestAsyncioTestCase(unittest.TestCase):
         self.assert_success(result)
         self.assertEqual(events, ['future', 'sync', 'callable'])
 
+    def test_async_generator_is_closed_without_background_tasks(self):
+        events = []
+
+        class Case(AsyncioTestCase):
+            async def values(self):
+                try:
+                    yield 1
+                finally:
+                    events.append('generator closed')
+
+            async def test_body(self):
+                self.generator = self.values()
+                self.assertEqual(await self.generator.__anext__(), 1)
+
+        _, result = self.run_case(Case)
+        self.assert_success(result)
+        self.assertEqual(events, ['generator closed'])
+
+    def test_background_shutdown_errors_remain_visible(self):
+        errors = []
+
+        class Case(AsyncioTestCase):
+            async def background(self):
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    raise ValueError('background shutdown failed')
+
+            async def test_body(self):
+                self.loop.set_exception_handler(lambda loop, context: errors.append(context))
+                self.task = asyncio.create_task(self.background())
+                await asyncio.sleep(0)
+
+        case, result = self.run_case(Case)
+        self.assert_success(result)
+        self.assertEqual(len(errors), 1)
+        self.assertIs(errors[0]['task'], case.task)
+        self.assertIsInstance(errors[0]['exception'], ValueError)
+        self.assertEqual(str(errors[0]['exception']), 'background shutdown failed')
+
     def test_virtual_clock_does_not_trigger_real_time_deadline(self):
         events = []
 
         class Case(AdvanceTimeTestCase):
             TIMEOUT = 1
+            LOOP_SLOW_CALLBACK_DURATION = float('inf')
 
             async def test_body(self):
                 self.loop.call_later(100, events.append, 'timer fired')
