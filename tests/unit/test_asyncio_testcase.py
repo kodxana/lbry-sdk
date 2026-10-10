@@ -2,7 +2,70 @@ import asyncio
 import contextvars
 import unittest
 
-from lbry.testcase_async import AsyncioTestCase, AdvanceTimeTestCase
+from lbry.testcase_async import AsyncioTestCase, AdvanceTimeTestCase, wait_for_tasks
+
+
+class TestWaitForTasks(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.started = asyncio.Event()
+        self.cleaned_up = asyncio.Event()
+
+    async def pending_operation(self):
+        self.started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0)
+            self.cleaned_up.set()
+
+    async def test_accepts_coroutines_and_futures(self):
+        future = asyncio.get_running_loop().create_future()
+
+        async def complete():
+            future.set_result('notification')
+            return 'operation'
+
+        self.assertEqual(await wait_for_tasks(complete(), future), ['operation', 'notification'])
+        self.assertEqual(await wait_for_tasks(), [])
+
+    async def test_failure_cancels_and_drains_sibling(self):
+        async def fail():
+            await self.started.wait()
+            raise ValueError('operation failed')
+
+        with self.assertRaisesRegex(ValueError, 'operation failed'):
+            await wait_for_tasks(self.pending_operation(), fail())
+        self.assertTrue(self.cleaned_up.is_set())
+
+    async def test_timeout_cancels_and_drains_operations(self):
+        future = asyncio.get_running_loop().create_future()
+        with self.assertRaises(asyncio.TimeoutError):
+            await wait_for_tasks(self.pending_operation(), future, timeout=0.01)
+        self.assertTrue(self.cleaned_up.is_set())
+        self.assertTrue(future.cancelled())
+
+    async def test_cancellation_drains_operations(self):
+        task = asyncio.create_task(wait_for_tasks(self.pending_operation()))
+        await self.started.wait()
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        self.assertTrue(self.cleaned_up.is_set())
+
+    async def test_cleanup_failure_does_not_hide_original_error(self):
+        async def fail():
+            await self.started.wait()
+            raise ValueError('operation failed')
+
+        async def fail_during_cleanup():
+            try:
+                await self.pending_operation()
+            finally:
+                raise RuntimeError('cleanup failed')
+
+        with self.assertRaisesRegex(ValueError, 'operation failed'):
+            await wait_for_tasks(fail_during_cleanup(), fail())
+        self.assertTrue(self.cleaned_up.is_set())
 
 
 class TestAsyncioTestCase(unittest.TestCase):
