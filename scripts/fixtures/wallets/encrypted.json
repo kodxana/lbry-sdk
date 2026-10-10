@@ -1,0 +1,33 @@
+{
+    "accounts": [
+        {
+            "address_generator": {
+                "change": {
+                    "gap": 6,
+                    "maximum_uses_per_address": 1
+                },
+                "name": "deterministic-chain",
+                "receiving": {
+                    "gap": 20,
+                    "maximum_uses_per_address": 1
+                }
+            },
+            "certificates": {},
+            "encrypted": true,
+            "ledger": "lbc_regtest",
+            "modified_on": 1571762543,
+            "name": "Public test account",
+            "private_key": "E9QGWeFycvG4/scf1rQ0wvEDxmMkRWuStgVFaXyGXm3tvVJCVQ9VVJRA6o40nO8vbdpgc8ktEhtGlc3YZ9WI4SE4lefFfct2AsgKvsQ5hlahxgwcVjKwK7ppS2wL5DC/kNllBYaFWbdbnJ8nsMDE2683hXQkfMGZ5lXIryv4VUc=",
+            "public_key": "tpubD6NzVbkrYhZ4YK5FNnVnMnwPWKmb1zxi2r8YNbrBhvdzDqkezG5SufMeL8LjpQB8JYCnekbWsBnTbAUnHcV1b8eS9HUjQseg3bM7Z7PwX35",
+            "seed": "MXdMSBjPEwum5jMgYrbQrp20eNscLDayz220B9UlRdfVY50AE6uYOu2B4tds2Kqf5SrBACd2LVj+M+BPcQRMhYW/QnVizbh3WP+vOiyTaRY6b7w/HcMgSgxg/2PhLYSzzjr/oviEVRTtfj0MEKVPRw=="
+        }
+    ],
+    "name": "SDK 0.113 compatibility fixture",
+    "preferences": {
+        "encrypt-on-disk": {
+            "ts": 1791651644,
+            "value": true
+        }
+    },
+    "version": 1
+}

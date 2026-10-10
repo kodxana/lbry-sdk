@@ -31,6 +31,8 @@ version tags cannot publish through this job.
 4. The tag run repeats all checks: generated schemas, release tooling, async
    runner compatibility, Linux lint/unit/all six regtest groups, native
    Windows/macOS configuration/schema/wallet suites, and executable builds.
+   Each executable must also pass the packaged daemon and wallet lifecycle
+   checks before its artifact is uploaded.
 5. The publishing job downloads the packaged binaries from that same run,
    checks the tag, source revision, file hashes and pinned Hub checks, then
    creates a draft. It verifies every uploaded asset against GitHub's SHA-256
@@ -64,6 +66,21 @@ python3 -m unittest discover -v -s scripts/tests
 Packaging runs in ordinary pull-request CI too, so the release bundle can be
 reviewed before any tag is created. Only the publishing job receives repository
 write permission, and its token is provided only to the publication step.
+
+To check a downloaded executable with only Python's standard library:
+
+```sh
+python3 scripts/test_binary.py /path/to/lbrynet --expected-version 0.114.0rc2
+```
+
+Use the `.exe` path on Windows. The test uses temporary data/configuration and
+wallet directories, a loopback Hub stub, and regtest wallet keys. It checks
+daemon readiness, new wallet creation, on-disk encryption, wrong-password
+rejection, unlocking, password removal, graceful process exit, and preservation
+of keys and addresses across restarts. Fixed plaintext and encrypted fixtures
+written by SDK 0.113.0 check compatibility with pre-upgrade wallets. The stub
+does not validate blocks or transactions; the regtest suites serve that purpose.
+Only process logs go to `ci-results/binary/`; temporary wallets are deleted.
 
 Passing isolated tests establishes regression coverage, not a mainnet-scale
 deployment rehearsal. Release notes must state the tested platforms, dependency

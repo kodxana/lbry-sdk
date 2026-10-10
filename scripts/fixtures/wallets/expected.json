@@ -1,0 +1,53 @@
+{
+  "source_commit": "67e28110c2bbb640e379acd85a4393630ebf2c71",
+  "password": "legacy fixture password",
+  "account": {
+    "ledger": "lbc_regtest",
+    "name": "Public test account",
+    "seed": "carbon smart garage balance margin twelve chest sword toast envelope bottom stomach absent",
+    "encrypted": false,
+    "private_key": "tprv8ZgxMBicQKsPer3TV8qBxPHGwJFerfmoTYXm65otHeqbPMVtMsFrjAjn9yLnJB7Aj7ov6EzcqgiXqqsymuBCoSh6sgKaBynx9EfKsUrkV7y",
+    "public_key": "tpubD6NzVbkrYhZ4YK5FNnVnMnwPWKmb1zxi2r8YNbrBhvdzDqkezG5SufMeL8LjpQB8JYCnekbWsBnTbAUnHcV1b8eS9HUjQseg3bM7Z7PwX35",
+    "address_generator": {
+      "name": "deterministic-chain",
+      "receiving": {
+        "gap": 20,
+        "maximum_uses_per_address": 1
+      },
+      "change": {
+        "gap": 6,
+        "maximum_uses_per_address": 1
+      }
+    },
+    "modified_on": 1571762543,
+    "certificates": {}
+  },
+  "addresses": [
+    "mfczTA38GQUcVpeCLADL7YT3QAHuReGQnm",
+    "mfyQ1UnfcuwJSoCFHAgzGNaV8QpFypewJm",
+    "mgCtLn1dC9n9DjPx2fKBCbkcjR2kLTAFqG",
+    "mhVR22AZ7aTcox9RTnGgfd13FW7VVnc9Qb",
+    "mibxqCeLNNN6YVVwxAVJy3fXWej8SXrgxo",
+    "mimNDu3kH8TMHRDC2cTUkYVTBK37AzUsxZ",
+    "mj7LwNz4oJEv7m8XRYVPENPpubFBxFuPVn",
+    "mjLZM65MNgzh2XrcfBdYX5ewLtaF45HzFg",
+    "mjuPeoGLKKqcB7ZSZUnrg11vj8LSbbfvo3",
+    "mmawhn73SddpV3Mo7iFCCAkZHekE3tJarX",
+    "mnY6PjBXxaR2KRiQkN2ywa57ZsTe11DmZL",
+    "mpmWD35PeQnRWzEs3CTgE8wuUsnC3gaSjU",
+    "mqb1k4b7quwpsgZRgHMdTBgobPEEv3F3Jt",
+    "mqxYUNR4aLc2kvGh2gfx5GJFY1vBbL1x7u",
+    "mrqJpaUEAAUQVWoUTdK5z5NFXKZorrVGeS",
+    "msEFtV1f91cVr7M2dp94jo6MNwHz83mc2F",
+    "mvkV4ErLadQbKVYZ6HTtebebqSotoe4mPf",
+    "mw3KWuKU3QUpEPfanDNikcLAPvi1qT19Cb",
+    "mwT92HVXnUNMpwcPiLqRFGZSmd7U7WbudS",
+    "mwjUndb5QECVy3V3iPsDq7KC8pRoxSifym",
+    "mwtcknBVBiSWrGrmwiarzRfsxhP6Az42FU",
+    "mxS5Be9Q1k3VmiXKRdLtrbjozqVmgcUBGk",
+    "myXLcLzmK71QQqJbT8KZXnUsvWBcz612Jd",
+    "myzLgSwmZ8jwcJy4Ptk9Ge3DExhuGD8Gub",
+    "n1Pq1dKueNXeeEvyRe6vrNvcmA5pMTqZdt",
+    "n1Vd29sfyULdC4tRUrGHuba45CCC3cXHgj"
+  ]
+}
