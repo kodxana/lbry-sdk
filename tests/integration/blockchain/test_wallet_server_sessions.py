@@ -1,4 +1,5 @@
 import asyncio
+from unittest.mock import patch
 
 from hub.herald import HUB_PROTOCOL_VERSION
 from hub.herald.session import LBRYElectrumX
@@ -94,6 +95,30 @@ class TestUsagePayment(CommandTestCase):
         self.assertTrue(wallet_pay_service.running)
 
 class TestESSync(CommandTestCase):
+    async def test_stop_finishes_index_tasks_before_deleting_index(self):
+        node = self.conductor.spv_node
+        es_writer = node.es_writer
+        client = es_writer.sync_client
+        tasks = list(es_writer.cancellable_tasks)
+        self.assertTrue(tasks)
+        self.assertTrue(any(not task.done() for task in tasks))
+        delete_index = es_writer.delete_index
+        tasks_finished_at_deletion = []
+        index_exists_after_deletion = []
+
+        async def delete_and_check():
+            tasks_finished_at_deletion.append(all(task.done() for task in tasks))
+            await delete_index()
+            index_exists_after_deletion.append(await client.indices.exists(es_writer.index))
+
+        with patch.object(es_writer, 'delete_index', delete_and_check):
+            await self.conductor.stop_spv()
+
+        self.assertEqual(tasks_finished_at_deletion, [True])
+        self.assertEqual(index_exists_after_deletion, [False])
+        self.assertTrue(node.stopped)
+        self.assertIsNone(es_writer.sync_client)
+
     async def test_es_sync_utility(self):
         es_writer = self.conductor.spv_node.es_writer
         server_search_client = self.conductor.spv_node.server.session_manager.search_index
@@ -121,7 +146,7 @@ class TestESSync(CommandTestCase):
         self.assertEqual(10, len(await self.claim_search(order_by=['height'])))
 
         # delete the index again and stop the writer, upon starting it the writer should reindex automatically
-        await es_writer.delete_index()
+        await es_writer.stop_index(delete=True)
         await es_writer.stop()
         server_search_client.clear_caches()
         self.assertEqual(0, len(await self.claim_search(order_by=['height'])))
@@ -143,7 +168,7 @@ class TestESSync(CommandTestCase):
         self.assertEqual(11, len(await self.claim_search(order_by=['height'])))
 
         # stop/delete es and advance the chain by 1, removing stream11
-        await es_writer.delete_index()
+        await es_writer.stop_index(delete=True)
         await es_writer.stop()
         server_search_client.clear_caches()
         await self.stream_abandon(stream11, confirm=False)
