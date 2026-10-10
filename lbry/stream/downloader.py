@@ -92,19 +92,27 @@ class StreamDownloader:
             if self.accumulate_task and not self.accumulate_task.done():
                 self.accumulate_task.cancel()
             _, self.accumulate_task = self.node.accumulate_peers(self.search_queue, self.peer_queue)
-        await self.add_fixed_peers()
-        enqueue_tracker_search(bytes.fromhex(self.sd_hash), self.peer_queue)
-        # start searching for peers for the sd hash
-        self.search_queue.put_nowait(self.sd_hash)
-        log.info("searching for peers for stream %s", self.sd_hash)
+        try:
+            await self.add_fixed_peers()
+            enqueue_tracker_search(bytes.fromhex(self.sd_hash), self.peer_queue)
+            # start searching for peers for the sd hash
+            self.search_queue.put_nowait(self.sd_hash)
+            log.info("searching for peers for stream %s", self.sd_hash)
 
-        if not self.descriptor:
-            await self.load_descriptor(connection_id)
+            if not self.descriptor:
+                await self.load_descriptor(connection_id)
 
-        if not await self.blob_manager.storage.stream_exists(self.sd_hash) and save_stream:
-            await self.blob_manager.storage.store_stream(
-                self.blob_manager.get_blob(self.sd_hash, length=self.descriptor.length), self.descriptor
-            )
+            if not await self.blob_manager.storage.stream_exists(self.sd_hash) and save_stream:
+                await self.blob_manager.storage.store_stream(
+                    self.blob_manager.get_blob(self.sd_hash, length=self.descriptor.length), self.descriptor
+                )
+        except (Exception, asyncio.CancelledError):
+            accumulate_task = self.accumulate_task
+            # FileManager reports this attempt's statistics after start raises.
+            self.stop(clear_statistics=False)
+            if accumulate_task:
+                await asyncio.gather(accumulate_task, return_exceptions=True)
+            raise
 
     async def download_stream_blob(self, blob_info: 'BlobInfo', connection_id: int = 0) -> 'AbstractBlob':
         if not filter(lambda b: b.blob_hash == blob_info.blob_hash, self.descriptor.blobs[:-1]):
@@ -130,11 +138,11 @@ class StreamDownloader:
             self.time_to_first_bytes = self.loop.time() - start
         return decrypted
 
-    def stop(self):
+    def stop(self, clear_statistics=True):
         if self.accumulate_task:
             self.accumulate_task.cancel()
             self.accumulate_task = None
         if self.fixed_peers_handle:
             self.fixed_peers_handle.cancel()
             self.fixed_peers_handle = None
-        self.blob_downloader.close()
+        self.blob_downloader.close(clear_statistics=clear_statistics)

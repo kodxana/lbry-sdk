@@ -319,10 +319,10 @@ class Network:
     async def network_loop(self):
         sleep_delay = 30
         while self.running:
-            await asyncio.wait(
-                map(asyncio.create_task, [asyncio.sleep(30), self._urgent_need_reconnect.wait()]),
-                return_when=asyncio.FIRST_COMPLETED
-            )
+            try:
+                await asyncio.wait_for(self._urgent_need_reconnect.wait(), timeout=30)
+            except asyncio.TimeoutError:
+                pass
             if self._urgent_need_reconnect.is_set():
                 sleep_delay = 30
             self._urgent_need_reconnect.clear()
@@ -343,22 +343,22 @@ class Network:
                 self._on_connected_controller.add(True)
                 server_str = "%s:%i" % client.server
                 log.info("maintaining connection to spv server %s", server_str)
-                self._keepalive_task = asyncio.create_task(self.client.keepalive_loop())
+                keepalive_task = self._keepalive_task = asyncio.create_task(self.client.keepalive_loop())
+                reconnect_task = asyncio.create_task(self._urgent_need_reconnect.wait())
                 try:
                     if not self._urgent_need_reconnect.is_set():
                         await asyncio.wait(
-                            [self._keepalive_task, asyncio.create_task(self._urgent_need_reconnect.wait())],
+                            [keepalive_task, reconnect_task],
                             return_when=asyncio.FIRST_COMPLETED
                         )
                     else:
-                        await self._keepalive_task
+                        await keepalive_task
                     if self._urgent_need_reconnect.is_set():
                         log.warning("urgent reconnect needed")
-                    if self._keepalive_task and not self._keepalive_task.done():
-                        self._keepalive_task.cancel()
-                except asyncio.CancelledError:
-                    pass
                 finally:
+                    keepalive_task.cancel()
+                    reconnect_task.cancel()
+                    await asyncio.gather(keepalive_task, reconnect_task, return_exceptions=True)
                     self._keepalive_task = None
                     self.client = None
                     self.server_features = None
@@ -367,9 +367,9 @@ class Network:
 
     async def stop(self):
         self.running = False
-        self.disconnect()
-        if self._loop_task and not self._loop_task.done():
+        if self._loop_task:
             self._loop_task.cancel()
+            await asyncio.gather(self._loop_task, return_exceptions=True)
         self._loop_task = None
         if self.aiohttp_session:
             await self.aiohttp_session.close()

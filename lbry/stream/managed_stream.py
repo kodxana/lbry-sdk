@@ -162,9 +162,11 @@ class ManagedStream(ManagedDownloadSource):
         self._running.set()
         try:
             await asyncio.wait_for(self.downloader.start(), timeout)
-        except asyncio.TimeoutError:
+        except (Exception, asyncio.CancelledError) as error:
             self._running.clear()
-            raise DownloadSDTimeoutError(self.sd_hash)
+            if isinstance(error, asyncio.TimeoutError):
+                raise DownloadSDTimeoutError(self.sd_hash) from error
+            raise
 
         if self.delayed_stop_task and not self.delayed_stop_task.done():
             self.delayed_stop_task.cancel()

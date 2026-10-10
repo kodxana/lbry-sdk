@@ -163,6 +163,8 @@ class BinaryTests(unittest.TestCase):
                 yield
                 self.assertEqual(self.rpc('stop'), 'Shutting down')
                 self.assertEqual(process.wait(timeout=30), 0, 'daemon shutdown failed')
+                self.assertNotIn('Task was destroyed but it is pending!',
+                                 log_path.read_text(encoding='utf-8', errors='replace'))
                 self.assertFalse(self.hub.unexpected, f'Unexpected Hub methods: {self.hub.unexpected}')
             except BaseException:
                 print(log_path.read_text(encoding='utf-8', errors='replace'), flush=True)

@@ -229,6 +229,7 @@ class Node:
         finally:
             for task in tasks:
                 task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _peers_for_value_producer(self, blob_hash: str, result_queue: asyncio.Queue):
         async def put_into_result_queue_after_pong(_peer):

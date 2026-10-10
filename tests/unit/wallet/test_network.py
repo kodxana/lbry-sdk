@@ -1,12 +1,85 @@
 import asyncio
 import gc
 import json
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from lbry.testcase_async import AdvanceTimeTestCase
 from lbry.wallet.network import ClientSession, Network
 from lbry.wallet.rpc import RPCError, ProtocolError
 from lbry.wallet.rpc.jsonrpc import JSONRPCv2
+
+
+class NetworkShutdownTests(AdvanceTimeTestCase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        self.network = Network(Mock(config={}))
+        self.network.connect_to_fastest = AsyncMock(return_value=None)
+        self.addCleanup(self.network.stop)
+        self.existing_tasks = asyncio.all_tasks()
+
+    def remaining_tasks(self):
+        return asyncio.all_tasks() - self.existing_tasks - {asyncio.current_task()}
+
+    async def connect(self):
+        self.disconnected = asyncio.Event()
+        self.closed = asyncio.Event()
+
+        async def keepalive():
+            try:
+                await self.disconnected.wait()
+            finally:
+                await asyncio.sleep(0)
+                self.closed.set()
+
+        client = Mock(server=('localhost', 50001))
+        client.is_closing.return_value = False
+        client.send_request = AsyncMock(return_value=[])
+        client.keepalive_loop = keepalive
+        self.network.connect_to_fastest.return_value = client
+        self.network.subscribe_headers = AsyncMock(return_value={'height': 0})
+        await self.network.start()
+        await self.advance(0)
+        self.assertTrue(self.network.is_connected)
+
+    async def test_stop_during_retry_wait_drains_tasks(self):
+        await self.network.start()
+        await self.advance(0)
+        self.assertEqual(1, self.network.connect_to_fastest.await_count)
+        await self.network.stop()
+        self.assertEqual(set(), self.remaining_tasks())
+
+    async def test_stop_connected_network_drains_tasks(self):
+        await self.connect()
+        await self.network.stop()
+        self.assertTrue(self.closed.is_set())
+        self.assertIsNone(self.network.client)
+        self.assertEqual(set(), self.remaining_tasks())
+
+    async def test_reconnect_does_not_accumulate_waiters(self):
+        await self.connect()
+        task_count = len(self.remaining_tasks())
+        for _ in range(3):
+            self.closed.clear()
+            self.network._urgent_need_reconnect.set()
+            await self.advance(0)
+            self.assertTrue(self.closed.is_set())
+            self.assertTrue(self.network.is_connected)
+            self.assertEqual(task_count, len(self.remaining_tasks()))
+        self.assertEqual(4, self.network.connect_to_fastest.await_count)
+        await self.network.stop()
+        self.assertEqual(set(), self.remaining_tasks())
+
+    async def test_connection_loss_retries_without_leaving_waiters(self):
+        await self.connect()
+        self.disconnected.set()
+        self.network.connect_to_fastest.return_value = None
+        await self.advance(0)
+        self.assertTrue(self.closed.is_set())
+        self.assertFalse(self.network.is_connected)
+        await self.advance(30)
+        self.assertEqual(2, self.network.connect_to_fastest.await_count)
+        await self.network.stop()
+        self.assertEqual(set(), self.remaining_tasks())
 
 
 class ClientSessionTests(AdvanceTimeTestCase):
