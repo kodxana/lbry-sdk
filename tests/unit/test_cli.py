@@ -4,6 +4,7 @@ import shutil
 import contextlib
 import logging
 import pathlib
+from functools import partial
 from io import StringIO
 from unittest import TestCase
 from unittest.mock import patch
@@ -43,10 +44,10 @@ async def get_logger(argv, **conf_options):
         args, command_args = parser.parse_known_args(argv)
         conf: Config = Config.create_from_arguments(args)
         setup_logging(logger, args, conf)
-        yield logger
+        with patch.object(logger, 'propagate', False):
+            yield logger
 
     finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
         for mod in cli.LOG_MODULES:
             log = logger.getChild(mod)
             log.setLevel(logging.NOTSET)
@@ -54,9 +55,29 @@ async def get_logger(argv, **conf_options):
                 h = log.handlers[0]
                 log.removeHandler(log.handlers[0])
                 h.close()
+        shutil.rmtree(temp_dir)
 
 
 class CLILoggingTest(AsyncioTestCase):
+
+    async def test_unicode_log_messages_survive_rotation(self):
+        # Simulate a non-UTF-8 Windows default on every test platform.
+        windows_handler = partial(logging.handlers.RotatingFileHandler, encoding='cp1250')
+        with patch('logging.handlers.RotatingFileHandler', windows_handler):
+            async with get_logger(["start", "--quiet"]) as log:
+                log = log.getChild('lbry')
+                handler = log.handlers[0]
+                log_path = pathlib.Path(handler.baseFilename)
+                title = 'Você - Zażółć gęślą jaźń - 日本語 - 🎬'
+
+                log.info('Before rotation: %s', title)
+                self.assertIn(f'Before rotation: {title}', log_path.read_text(encoding='utf-8'))
+
+                handler.maxBytes = 1
+                log.info('After rotation: %s', title)
+                rotated_path = pathlib.Path(f'{log_path}.1')
+                self.assertIn(f'Before rotation: {title}', rotated_path.read_text(encoding='utf-8'))
+                self.assertIn(f'After rotation: {title}', log_path.read_text(encoding='utf-8'))
 
     async def test_verbose_logging(self):
         async with get_logger(["start", "--quiet"], share_usage_data=False) as log:

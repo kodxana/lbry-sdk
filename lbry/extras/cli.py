@@ -237,7 +237,9 @@ LOG_MODULES = 'lbry', 'aioupnp'
 
 def setup_logging(logger: logging.Logger, args: argparse.Namespace, conf: Config):
     default_formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(name)s:%(lineno)d: %(message)s")
-    file_handler = logging.handlers.RotatingFileHandler(conf.log_file_path, maxBytes=2097152, backupCount=5)
+    file_handler = logging.handlers.RotatingFileHandler(
+        conf.log_file_path, maxBytes=2097152, backupCount=5, encoding='utf-8'
+    )
     file_handler.setFormatter(default_formatter)
     for module_name in LOG_MODULES:
         logger.getChild(module_name).addHandler(file_handler)
