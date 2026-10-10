@@ -35,7 +35,9 @@ class TestBootstrapNode(AsyncioTestCase):
                 self.addCleanup(nodes[i].stop)
                 futs.append(nodes[i].joined.wait())
             await asyncio.gather(*futs)
-            while self.bootstrap_node.protocol.ping_queue.busy:
+            # Ping completion queues routing-table updates; it does not wait
+            # for the routing task to finish inserting those peers.
+            while len(self.bootstrap_node.protocol.routing_table.get_peers()) < len(nodes):
                 await advance(1)
             self.assertEqual(100, len(self.bootstrap_node.protocol.routing_table.get_peers()))
 

@@ -19,6 +19,10 @@ The SDK implements the LBRY network protocols in Python and includes components 
 
 Use [INSTALL.md](INSTALL.md) to work from this fork's source. Community releases belong on [this repository's releases page](https://github.com/kodxana/lbry-sdk-ng/releases). Historical [upstream binaries](https://github.com/lbryio/lbry-sdk/releases) do not include this fork's fixes.
 
+The [0.114.0rc1 candidate](docs/releases/0.114.0rc1.md) requires Python 3.13.
+Its release notes describe supported platforms, wallet and database compatibility
+checks, and the limits of the isolated test coverage.
+
 ## Usage
 
 Run `lbrynet start` to launch the API server.

@@ -798,7 +798,7 @@ class Database(SQLiteMixin):
     async def release_outputs(self, txos):
         await self.reserve_outputs(txos, is_reserved=False)
 
-    async def rewind_blockchain(self, above_height):  # pylint: disable=no-self-use
+    async def rewind_blockchain(self, above_height):
         # TODO:
         # 1. delete transactions above_height
         # 2. update address histories removing deleted TXs

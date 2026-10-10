@@ -1,13 +1,8 @@
-FROM python:3.9-bullseye@sha256:5bd3c295ffab8b738108c7705052086d78b036078d5605dfc51e328ab758cc07
+FROM python:3.13-bookworm@sha256:073ffebb96ae4d0ed73ccad59f08c47bd84af8a79f5258130f8458ac50ad9ff4
 
-RUN printf '%s\n' \
-    'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20250801T000000Z/ bullseye main' \
-    'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20250801T000000Z/ bullseye-security main' \
-    > /etc/apt/sources.list \
-    && apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 COPY docker/test-constraints.txt docker/build-requirements.txt /opt/
-# Old PyYAML needs Cython 0.29 during its build; pkg_resources needs setuptools.
 RUN python -m pip install --no-cache-dir -c /opt/test-constraints.txt \
     pip setuptools wheel Cython
 
@@ -23,6 +18,7 @@ RUN orchstr8 download && echo \
     '970c9595227cd596ef3c6d9eafa350e2427aea9aea9f73f1aa733226389122ee  lbry/wallet/bin/lbcwallet_0.13.100-alpha.0_linux_amd64.tar.gz' \
     | sha256sum -c -
 COPY tests ./tests
+COPY scripts/hook-coincurve.py ./scripts/hook-coincurve.py
 RUN python -m tests.integration.claims.fixtures
 RUN python -m pip freeze > /opt/baseline-packages.txt \
     && useradd --create-home --uid 1000 sdk \

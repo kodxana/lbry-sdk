@@ -50,6 +50,10 @@ class BlobExchangeClientProtocol(asyncio.Protocol):
         if not self._response_fut:
             log.warning("Protocol received data before expected, probable race on keep alive. Closing transport.")
             return self.close()
+        if self._response_fut.cancelled():
+            # Cancellation may reach the future before the download task has
+            # resumed to close the transport. Discard a response in that gap.
+            return self.close()
         if self._blob_bytes_received and not self.writer.closed():
             return self._write(data)
 
@@ -86,12 +90,12 @@ class BlobExchangeClientProtocol(asyncio.Protocol):
         self._blob_bytes_received += len(data)
         try:
             self.writer.write(data)
-        except OSError as err:
-            log.error("error downloading blob from %s:%i: %s", self.peer_address, self.peer_port, err)
-            if self._response_fut and not self._response_fut.done():
-                self._response_fut.set_exception(err)
         except asyncio.TimeoutError as err:
             log.error("%s downloading blob from %s:%i", str(err), self.peer_address, self.peer_port)
+            if self._response_fut and not self._response_fut.done():
+                self._response_fut.set_exception(err)
+        except OSError as err:
+            log.error("error downloading blob from %s:%i: %s", self.peer_address, self.peer_port, err)
             if self._response_fut and not self._response_fut.done():
                 self._response_fut.set_exception(err)
 
@@ -189,16 +193,16 @@ class BlobExchangeClientProtocol(asyncio.Protocol):
             self.blob, self.writer = blob, blob.get_blob_writer(self.peer_address, self.peer_port)
             self._response_fut = asyncio.Future()
             return await self._download_blob()
-        except OSError:
-            # i'm not sure how to fix this race condition - jack
-            log.warning("race happened downloading %s from %s:%s", blob_hash, self.peer_address, self.peer_port)
-            # return self._blob_bytes_received, self.transport
-            raise
         except asyncio.TimeoutError:
             if self._response_fut and not self._response_fut.done():
                 self._response_fut.cancel()
             self.close()
             return self._blob_bytes_received, None
+        except OSError:
+            # i'm not sure how to fix this race condition - jack
+            log.warning("race happened downloading %s from %s:%s", blob_hash, self.peer_address, self.peer_port)
+            # return self._blob_bytes_received, self.transport
+            raise
         except asyncio.CancelledError:
             self.close()
             raise

@@ -1,170 +1,90 @@
 # Installing LBRY SDK NG
 
-These instructions use the community fork. Historical LBRY Inc. binaries do not contain its fixes. See the [README](README.md) for project and release links.
+This is the community-maintained fork. Its package remains `lbry` and its
+command remains `lbrynet`. Historical LBRY Inc. binaries do not include these
+changes.
 
-These instructions are for installing LBRY from source, which is recommended if you are interested in doing development work or LBRY is not available on your operating system (godspeed, TempleOS users).
+## Requirements
 
-## Prerequisites
+Use **CPython 3.13, 64-bit**. Python 3.14 is not supported by the selected
+libtorrent wheels. CI targets Linux x86-64, Windows x64 and Intel macOS 15.
+Other architectures are not covered by these instructions.
 
-Python 3.9 is the current tested baseline. Python 3.9 and several pinned dependencies are obsolete; support for newer interpreters is still being developed. See the [compatibility audit](docs/python-compatibility.md) for known blockers and the [Docker test runner](docs/testing.md) for a reproducible development environment.
+Some dependencies build from source. Linux needs a C compiler and the headers
+for the selected Python installation. Windows needs Microsoft C++ Build Tools;
+macOS needs Xcode Command Line Tools. Install FFmpeg if you use video analysis
+or transcoding. A system protobuf compiler is not needed to run the SDK.
 
-The platform instructions below are inherited setup guidance. Use the pinned test environment when reproducing CI results.
+On Intel macOS, cryptography also builds from source. Install its tools and
+select Homebrew's OpenSSL before installing the SDK:
 
-### macOS
-
-macOS users will need to install [xcode command line tools](https://developer.xamarin.com/guides/testcloud/calabash/configuring/osx/install-xcode-command-line-tools/) and [homebrew](http://brew.sh/).
-
-These environment variables also need to be set:
-```
-PYTHONUNBUFFERED=1
-EVENT_NOKQUEUE=1
-```
-
-Remaining dependencies can then be installed by running:
-```
-brew install python protobuf
-```
-
-Assistance installing Python3: https://docs.python-guide.org/starting/install3/osx/.
-
-### Linux
-
-The historical Ubuntu setup uses the following packages:
-```
-sudo add-apt-repository ppa:deadsnakes/ppa
-sudo apt-get update
-sudo apt-get install build-essential python3.9 python3.9-dev git python3.9-venv libssl-dev python-protobuf
+```sh
+brew install openssl@3 rust
+export OPENSSL_DIR="$(brew --prefix openssl@3)"
+export OPENSSL_STATIC=1
 ```
 
-Package availability depends on the Ubuntu release. The [Docker test runner](docs/testing.md)
-pins the Python 3.9 environment used by this fork.
+This follows the [cryptography build instructions](https://cryptography.io/en/latest/installation/#building-cryptography-on-macos).
 
-On Raspbian, you will also need to install `python-pyparsing`.
+Use a fresh virtual environment when upgrading. Keep existing wallet and data
+directories intact. If you installed the `hub` extra, the old `lbry-rocksdb` and
+new `lbry-rocksdb-ng` packages must not share an environment: they install the
+same module files.
 
-If you're running another Linux distro, install the equivalent of the above packages for your system.
+## Install from source
 
-## Installation
+Clone the community repository:
 
-### Linux/Mac
-
-Clone the repository:
-```bash
+```sh
 git clone https://github.com/kodxana/lbry-sdk-ng.git
 cd lbry-sdk-ng
 ```
 
-Create a Python virtual environment for lbry-sdk:
-```bash
-python3.9 -m venv lbry-venv
-```
+On Linux or macOS:
 
-Activate virtual environment:
-```bash
+```sh
+python3.13 -m venv lbry-venv
 source lbry-venv/bin/activate
 ```
 
-Make sure you're on Python 3.9 as default in the virtual environment:
-```bash
-python --version
+On Windows, in PowerShell:
+
+```powershell
+py -3.13 -m venv lbry-venv
+.\lbry-venv\Scripts\Activate.ps1
 ```
 
-Install packages:
-```bash
-make install
+Install and verify the environment:
+
+```sh
+python -m pip install --upgrade pip
+python -m pip install -e .
+python -m pip check
+lbrynet --version
 ```
 
-If you are on Linux and using PyCharm, generates initial configs:
-```bash
-make idea
-```
+The editable installation uses source changes directly; it does not need to
+be reinstalled for each Python edit. Run `deactivate` to leave the environment.
 
-To verify your installation, `which lbrynet` should return a path inside
-of the `lbry-venv` folder.
-```bash
-(lbry-venv) $ which lbrynet
-/opt/lbry-sdk-ng/lbry-venv/bin/lbrynet
-```
+## Development and testing
 
-To exit the virtual environment simply use the command `deactivate`.
+Install unit-test dependencies with `python -m pip install -e '.[test]'`.
+Use the [Docker test runner](docs/testing.md) for full Linux unit tests and
+regtests. It supplies the matching Hub, isolated Elasticsearch, and checksum-
+verified blockchain test binaries. Tests use temporary data and no real funds;
+you do not need a mainnet node on your computer.
 
-### Windows
+The optional `hub` extra is for Linux x86-64 with glibc 2.35 or newer. It installs
+a SHA-256-pinned RocksDB wheel from the community GitHub release. Alpine/musl
+is not supported. Normal SDK installations do not need this extra.
 
-Clone the repository:
-```bash
-git clone https://github.com/kodxana/lbry-sdk-ng.git
-cd lbry-sdk-ng
-```
+## Run the SDK
 
-Create a Python virtual environment for lbry-sdk:
-```bash
-python -m venv lbry-venv
-```
-
-Activate virtual environment:
-```bash
-lbry-venv\Scripts\activate
-```
-
-Install packages:
-```bash
-pip install -e .
-```
-
-## Run the tests
-
-For a contained Python 3.9 baseline on Linux or Windows with WSL2, see
-[the Docker test runner](docs/testing.md). It downloads its dependencies during
-the build, then runs tests without external network access or a mainnet node.
-
-### Elasticsearch
-
-For running integration tests, Elasticsearch is required to be available at localhost:9200/
-
-The easiest way to start it is using docker with:
-```bash
-make elastic-docker
-```
-
-Alternative installation methods are available [at Elasticsearch website](https://www.elastic.co/guide/en/elasticsearch/reference/current/install-elasticsearch.html).
-
-To run the unit and integration tests from the repo directory:
-```
-python -m unittest discover tests.unit
-python -m unittest discover tests.integration
-```
-
-## Usage
-
-To start the API server:
-```
+```sh
 lbrynet start
 ```
 
-Whenever the code inside [lbry-sdk/lbry](./lbry)
-is modified we should run `make install` to recompile the `lbrynet`
-executable with the newest code.
-
-## Development
-
-When developing, remember to enter the environment,
-and if you wish start the server interactively.
-```bash
-$ source lbry-venv/bin/activate
-
-(lbry-venv) $ python lbry/extras/cli.py start
-```
-
-Parameters can be passed in the same way.
-```bash
-(lbry-venv) $ python lbry/extras/cli.py wallet balance
-```
-
-If a Python debugger (`pdb` or `ipdb`) is installed we can also start it
-in this way, set up break points, and step through the code.
-```bash
-(lbry-venv) $ pip install ipdb
-
-(lbry-venv) $ ipdb lbry/extras/cli.py
-```
-
-Happy hacking!
+This starts the SDK's normal wallet and network services. For isolated testing,
+use the test runner instead. See the [README](README.md) for configuration and
+API documentation, and the [compatibility notes](docs/python-compatibility.md)
+for the upgrade's validation status.

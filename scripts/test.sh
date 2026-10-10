@@ -20,7 +20,7 @@ case "$suite" in
             wallet) set -- discover -v tests.unit.wallet ;;
             lint) set -- python -m pylint --rcfile=setup.cfg lbry ;;
             build)
-                set -- sh -ec 'python -m PyInstaller --noconfirm --onefile --name lbrynet lbry/extras/cli.py; dist/lbrynet --version'
+                set -- sh -ec 'python -m PyInstaller --noconfirm --additional-hooks-dir=scripts --onefile --name lbrynet lbry/extras/cli.py; dist/lbrynet --version'
                 ;;
         esac
         ;;
@@ -82,6 +82,7 @@ network=none
 if [ "$needs_elastic" = true ]; then
     es_image=docker.elastic.co/elasticsearch/elasticsearch:7.12.1@sha256:8e93628cef91f721bc9c4662f4a8f088752c2464fa966665413f175f8a96d268
     es_id=$(docker run --detach --platform linux/amd64 --cidfile "$run_dir/elastic.cid" \
+        --sysctl net.ipv4.ip_local_reserved_ports=50001-50100 \
         --network none --memory 2g --cpus 2 \
         --env discovery.type=single-node --env xpack.security.enabled=false \
         --env 'ES_JAVA_OPTS=-Xms512m -Xmx512m' "$es_image")

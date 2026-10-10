@@ -69,7 +69,7 @@ class StreamController:
         for subscription in self._iterate_subscriptions:
             maybe_coroutine = notify(subscription)
             if asyncio.iscoroutine(maybe_coroutine):
-                tasks.append(maybe_coroutine)
+                tasks.append(asyncio.create_task(maybe_coroutine))
         if tasks:
             return asyncio.ensure_future(asyncio.wait(tasks))
         else:

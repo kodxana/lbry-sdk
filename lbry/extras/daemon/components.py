@@ -670,7 +670,8 @@ class UPnPComponent(Component):
         if self.upnp_redirects:
             log.info("Removing upnp redirects: %s", self.upnp_redirects)
             await asyncio.wait([
-                self.upnp.delete_port_mapping(port, protocol) for protocol, port in self.upnp_redirects.items()
+                asyncio.create_task(self.upnp.delete_port_mapping(port, protocol))
+                for protocol, port in self.upnp_redirects.items()
             ])
         if self._maintain_redirects_task and not self._maintain_redirects_task.done():
             self._maintain_redirects_task.cancel()

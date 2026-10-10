@@ -1,9 +1,10 @@
-version: '3'
 services:
     websdk:
-        image: vshyba/websdk
+        build:
+            context: ..
+            dockerfile: docker/Dockerfile.web
         ports:
-            - '5279:5279'
-            - '5280:5280'
+            - '127.0.0.1:5279:5279'
+            - '127.0.0.1:5280:5280'
         volumes:
-            - ./webconf.yaml:/webconf.yaml
+            - ./webconf.yaml:/webconf.yaml:ro

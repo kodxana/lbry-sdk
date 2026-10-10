@@ -16,10 +16,10 @@ import contextlib
 import functools
 import collections
 import hashlib
-import pkg_resources
 
 import certifi
 import aiohttp
+from packaging.version import Version
 from prometheus_client import Counter
 from lbry.schema.claim import Claim
 
@@ -68,7 +68,7 @@ def generate_id(num=None):
 
 def version_is_greater_than(version_a, version_b):
     """Returns True if version a is more recent than version b"""
-    return pkg_resources.parse_version(version_a) > pkg_resources.parse_version(version_b)
+    return Version(version_a) > Version(version_b)
 
 
 def rot13(some_str):

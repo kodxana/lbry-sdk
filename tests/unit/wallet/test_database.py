@@ -3,6 +3,7 @@ import unittest
 import sqlite3
 import tempfile
 import asyncio
+from contextlib import closing
 
 from lbry.wallet import (
     Wallet, Account, Ledger, Database, Headers, Transaction, Input
@@ -457,25 +458,25 @@ class TestUpgrade(AsyncioTestCase):
         os.remove(self.path)
 
     def get_version(self):
-        with sqlite3.connect(self.path) as conn:
+        with closing(sqlite3.connect(self.path)) as conn:
             versions = conn.execute('select version from version').fetchall()
             assert len(versions) == 1
             return versions[0][0]
 
     def get_tables(self):
-        with sqlite3.connect(self.path) as conn:
+        with closing(sqlite3.connect(self.path)) as conn:
             sql = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
             return [col[0] for col in conn.execute(sql).fetchall()]
 
     def add_address(self, address):
-        with sqlite3.connect(self.path) as conn:
+        with closing(sqlite3.connect(self.path)) as conn, conn:
             conn.execute("""
             INSERT INTO account_address (address, account, chain, n, pubkey, chain_code, depth)
             VALUES (?, 'account1', 0, 0, 'pubkey', 'chain_code', 0)
             """, (address,))
 
     def get_addresses(self):
-        with sqlite3.connect(self.path) as conn:
+        with closing(sqlite3.connect(self.path)) as conn:
             sql = "SELECT address FROM account_address ORDER BY address;"
             return [col[0] for col in conn.execute(sql).fetchall()]
 

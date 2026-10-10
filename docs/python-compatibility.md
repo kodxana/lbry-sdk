@@ -1,5 +1,39 @@
 # Python compatibility audit
 
+## Python 3.13 migration
+
+The runtime branch now requires CPython 3.13 and updates the SDK and Hub's shared
+dependencies together. The Linux runner and native Windows/macOS jobs use this
+runtime. Python 3.14 remains excluded because the selected libtorrent release
+does not provide its wheels. Intel macOS requires version 15 or later.
+
+Asyncio coroutine waits, torrent events, timeout exception ordering and seeded
+coin selection have been updated. The Hub uses a portable SHA-256 state API
+instead of accessing OpenSSL's private memory. Legacy 120-byte states retain
+their exact bytes until updated, and database reopen/rollback tests cover them.
+The Python 3.13 RocksDB wheel keeps the existing 6.25.3 storage engine.
+
+The Linux unit suite contains 410 tests (two skips). Native Windows and Intel
+macOS run 160 wallet tests, 25 schema tests and 17 configuration tests; Windows
+skips five Unix-only wallet cases, and both platforms skip two configuration
+cases. The Hub suite contains 86 database/RPC tests, including real-socket
+shutdown and search-recovery regressions.
+Both projects use protobuf 7.36.2 with reproducibly generated modules and
+unchanged deployed wire definitions.
+
+Full validation also requires all six SDK regtest groups, Hub resolve/session
+tests against published and rebuilt RocksDB wheels, and executable builds on
+all three platforms. Results and release status are recorded in
+[SDK PR #20](https://github.com/kodxana/lbry-sdk-ng/pull/20) and
+[Hub PR #9](https://github.com/kodxana/lbry-hub-ng/pull/9). See the
+[candidate notes](releases/0.114.0rc1.md) for installation changes. These checks
+use no mainnet database or real wallet funds.
+
+The audit below records the earlier Python 3.9 baseline and explains the
+upgrade decisions. Its old package pins describe that historical environment.
+
+## Historical audit
+
 Audited October 9, 2026, at SDK revision
 `52f707043fdd6bcdeea1f3d937e16e6128476e45` and the Hub revision pinned in
 `setup.py`, `929448d64bcbe6c5e476757ec78456beaa85e56a`.
@@ -101,10 +135,16 @@ reported the same failures:
 | Passing a coroutine to `asyncio.wait` | `TypeError: Passing coroutines is forbidden, use tasks explicitly.` |
 | Constructing `TorrentHandle` with a dummy handle | `TypeError: Event.__init__() got an unexpected keyword argument 'loop'` |
 
-These are isolated compatibility failures, not full SDK runs. Raw-coroutine
-waits remain in `lbry/testcase.py`, and torrent events still use `loop=` in
-`lbry/torrent/session.py`. Other callers must be checked individually; many
-existing `asyncio.wait` calls already receive tasks.
+These were isolated compatibility failures, not full SDK runs. The test runner
+now uses `IsolatedAsyncioTestCase`, with standard-library regression coverage
+on Python 3.9, 3.12, 3.13 and 3.14. Transaction test helpers now schedule their
+coroutines explicitly, propagate failures and timeouts, and cancel and drain
+unfinished operations. Torrent events are created on the session loop without
+the removed `loop=` argument; adding native torrents stays in the executor.
+The focused async and torrent tests pass on Windows Python 3.9 and 3.13, using
+libtorrent 2.0.6 and 2.0.15 respectively. The SDK dependency pin remains 2.0.6.
+Production raw-coroutine waits in the daemon and wallet event controller still
+need migration and runtime coverage before full Python 3.13 testing.
 
 ## Hub constraints
 

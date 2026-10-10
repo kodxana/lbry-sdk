@@ -1,2 +1,2 @@
-__version__ = "0.113.0"
-version = tuple(map(int, __version__.split('.')))  # pylint: disable=invalid-name
+__version__ = "0.114.0rc1"
+version = tuple(map(int, __version__.split('rc', 1)[0].split('.')))  # pylint: disable=invalid-name

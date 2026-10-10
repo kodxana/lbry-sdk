@@ -19,6 +19,22 @@ defaults:
     shell: bash
 
 jobs:
+  schema:
+    name: generated schemas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: '0.12.24'
+          python-version: '3.13.15'
+          activate-environment: true
+      - run: uv pip install -r lbry/schema/requirements.txt
+      - run: python scripts/regenerate_schema.py --check
+
   async-runner:
     name: async runner / python ${{ matrix.python }}
     runs-on: ubuntu-24.04
@@ -54,7 +70,7 @@ jobs:
       - name: Configure Elasticsearch mmap limit
         if: matrix.suite != 'lint' && matrix.suite != 'unit'
         run: sudo sysctl -w vm.max_map_count=262144
-      - name: Run baseline suite
+      - name: Run Python 3.13 suite
         env:
           SUITE: ${{ matrix.suite }}
           TEST_OUTPUT_DIR: ci-results
@@ -93,18 +109,23 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: '0.12.24'
-          python-version: '3.9.25'
-          python-arch: x86_64
+          python-version: '3.13.15'
           activate-environment: true
           enable-cache: true
           cache-dependency-glob: |
             setup.py
             docker/test-constraints.txt
             docker/build-requirements.txt
-      - name: Install baseline dependencies
+      - name: Prepare Intel macOS cryptography build
+        if: runner.os == 'macOS'
+        run: |
+          brew install openssl@3 rust
+          echo "OPENSSL_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+          echo "OPENSSL_STATIC=1" >> "$GITHUB_ENV"
+      - name: Install Python 3.13 dependencies
         run: |
           uv pip install -c docker/test-constraints.txt pip setuptools wheel Cython
-          python -m pip install --no-build-isolation -c docker/test-constraints.txt -r docker/build-requirements.txt -e '.[test]'
+          python -m pip install -c docker/test-constraints.txt -r docker/build-requirements.txt -e '.[test]'
           python -m pip check
           mkdir -p ci-results
           python -m pip freeze > ci-results/packages.txt
@@ -123,7 +144,7 @@ jobs:
       - name: Build macOS binary
         if: runner.os == 'macOS'
         run: |
-          python -m PyInstaller --noconfirm --onefile --name lbrynet lbry/extras/cli.py
+          python -m PyInstaller --noconfirm --additional-hooks-dir=scripts --onefile --name lbrynet lbry/extras/cli.py
           dist/lbrynet --version
       - name: Build Windows binary
         if: runner.os == 'Windows'
@@ -147,7 +168,7 @@ jobs:
 
   build-linux:
     name: build / linux
-    needs: [async-runner, linux-tests, native]
+    needs: [schema, async-runner, linux-tests, native]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

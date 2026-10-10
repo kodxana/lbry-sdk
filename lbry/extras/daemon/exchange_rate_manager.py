@@ -206,7 +206,7 @@ class ExchangeRateManager:
 
     def wait(self):
         return asyncio.wait(
-            [feed.event.wait() for feed in self.market_feeds],
+            [asyncio.create_task(feed.event.wait()) for feed in self.market_feeds],
         )
 
     def start(self):

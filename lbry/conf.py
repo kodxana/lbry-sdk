@@ -78,10 +78,10 @@ class Setting(Generic[T]):
     def validate(self, value):
         raise NotImplementedError()
 
-    def deserialize(self, value):  # pylint: disable=no-self-use
+    def deserialize(self, value):
         return value
 
-    def serialize(self, value):  # pylint: disable=no-self-use
+    def serialize(self, value):
         return value
 
     def contribute_to_argparse(self, parser: ArgumentParser):

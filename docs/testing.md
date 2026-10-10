@@ -1,12 +1,11 @@
 # Local test baseline
 
-The Docker runner provides the historical Python 3.9 environment while work on
-newer Python versions is underway. It tests the current checkout, including
-uncommitted source changes. Python 3.9 and several dependencies are obsolete;
-this image is a test environment, not a deployment image.
+The Docker runner uses CPython 3.13 on Debian Bookworm. It tests the current
+checkout, including uncommitted source changes, with the dependency versions
+in `docker/test-constraints.txt`. This image is a test environment.
 
 See the [Python compatibility audit](python-compatibility.md) for the known
-installation and runtime blockers and the proposed migration order.
+historical installation findings and the migration status.
 
 The Linux test image installs the pinned Hub with `lbry-rocksdb-ng` 0.8.3 from
 its hash-pinned GitHub release. Docker rebuilds the environment when these
@@ -92,10 +91,10 @@ tests. It can also be prepared for a native test run with:
 python -m tests.integration.claims.fixtures
 ```
 
-Python and Elasticsearch images are pinned by digest. Debian packages come from
-the August 1, 2025 snapshot, and the regtest archives have SHA-256 checks. These
-pins capture a historical test environment; Python source distributions are
-still built locally, so byte-for-byte image reproducibility is not guaranteed.
+Python and Elasticsearch images are pinned by digest, and the regtest archives
+have SHA-256 checks. Debian packages come from the Bookworm repositories.
+Python source distributions are built locally, so byte-for-byte image
+reproducibility is not guaranteed.
 Installed Python versions are recorded in
 `/opt/baseline-packages.txt` inside the image.
 
@@ -103,7 +102,10 @@ Tests run as an ordinary user, with no host directories mounted and no ports
 published. Unit tests get a network namespace with loopback only. Integration
 tests share Elasticsearch's loopback-only namespace so the SDK, Hub, and local
 regtest processes can communicate. There is no external network route during
-tests. Wallets, chains, and generated media live in temporary containers; the
+tests. The namespace reserves ports 50001-50100 for the test Hub listeners so
+outgoing connections cannot acquire them as ephemeral source ports between
+restarts. This setting applies only to the temporary container namespace.
+Wallets, chains, and generated media live in temporary containers; the
 runner removes its containers on success, failure, or interruption. Docker's
 images and build cache remain for later runs.
 
@@ -217,7 +219,9 @@ The `ci` workflow runs on pull requests, pushes to `master`, version tags, and
 manual dispatch. Linux lint, unit tests, and all six integration groups use the
 same container runner described above on Ubuntu 24.04. Windows 2022 and Intel
 macOS 15 run configuration tests and the full wallet unit suite natively using
-managed Python 3.9.25. The full wallet suite also runs in the Linux unit job.
+Python 3.13.15. The full wallet suite also runs in the Linux unit job.
+Intel macOS builds cryptography against Homebrew OpenSSL with static linking;
+it needs Rust and the Xcode command-line tools during installation.
 
 The native jobs build executables and check `--version`. A Linux build runs
 after the test jobs pass. Download `ci-*` artifacts for logs, package versions,
@@ -225,7 +229,7 @@ and per-suite coverage XML; `lbrynet-*` artifacts contain the binaries. These
 artifacts expire after 14 days. Coveralls credentials are not needed.
 
 The workflow has read-only repository permissions and does not publish releases.
-Version tags run validation and produce artifacts only. The legacy Slack
-notification is restricted to the upstream repository. Release publishing and
-release validation are separate maintenance work; CI binaries still use the
-historical Python and dependency baseline.
+Version tags run validation and produce artifacts only. Follow the
+[release procedure](releasing.md) to prepare a community release from the
+validated commit. Passing CI does not publish a release or approve deployment
+against a production wallet.
