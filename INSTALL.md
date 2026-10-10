@@ -1,25 +1,14 @@
-# Installing LBRY
+# Installing LBRY SDK NG
 
-If only the JSON-RPC API server is needed, the recommended way to install LBRY is to use a pre-built binary. We provide binaries for all major operating systems. See the [README](README.md)!
+These instructions use the community fork. Historical LBRY Inc. binaries do not contain its fixes. See the [README](README.md) for project and release links.
 
 These instructions are for installing LBRY from source, which is recommended if you are interested in doing development work or LBRY is not available on your operating system (godspeed, TempleOS users).
 
-Here's a video walkthrough of this setup, which is itself hosted by the LBRY network and provided via [spee.ch](https://github.com/lbryio/spee.ch):
-[![Setup for development](https://spee.ch/2018-10-04-17-13-54-017046806.png)](https://spee.ch/967f99344308f1e90f0620d91b6c93e4dfb240e0/lbrynet-dev-setup.mp4)
-
 ## Prerequisites
 
-Running `lbrynet` from source requires Python 3.7. Get the installer for your OS [here](https://www.python.org/downloads/release/python-370/).
+Python 3.9 is the current tested baseline. Python 3.9 and several pinned dependencies are obsolete; support for newer interpreters is still being developed. See the [compatibility audit](docs/python-compatibility.md) for known blockers and the [Docker test runner](docs/testing.md) for a reproducible development environment.
 
-After installing Python 3.7, you'll need to install some additional libraries depending on your operating system.
-
-Because of [issue #2769](https://github.com/lbryio/lbry-sdk/issues/2769)
-at the moment the `lbrynet` daemon will only work correctly with Python 3.7.
-If Python 3.8+ is used, the daemon will start but the RPC server
-may not accept messages, returning the following:
-```
-Could not connect to daemon. Are you sure it's running?
-```
+The platform instructions below are inherited setup guidance. Use the pinned test environment when reproducing CI results.
 
 ### macOS
 
@@ -40,16 +29,15 @@ Assistance installing Python3: https://docs.python-guide.org/starting/install3/o
 
 ### Linux
 
-On Ubuntu (we recommend 18.04 or 20.04), install the following:
+The historical Ubuntu setup uses the following packages:
 ```
 sudo add-apt-repository ppa:deadsnakes/ppa
 sudo apt-get update
-sudo apt-get install build-essential python3.7 python3.7-dev git python3.7-venv libssl-dev python-protobuf
+sudo apt-get install build-essential python3.9 python3.9-dev git python3.9-venv libssl-dev python-protobuf
 ```
 
-The [deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa) provides Python 3.7
-for those Ubuntu distributions that no longer have it in their
-official repositories.
+Package availability depends on the Ubuntu release. The [Docker test runner](docs/testing.md)
+pins the Python 3.9 environment used by this fork.
 
 On Raspbian, you will also need to install `python-pyparsing`.
 
@@ -61,13 +49,13 @@ If you're running another Linux distro, install the equivalent of the above pack
 
 Clone the repository:
 ```bash
-git clone https://github.com/lbryio/lbry-sdk.git
-cd lbry-sdk
+git clone https://github.com/kodxana/lbry-sdk-ng.git
+cd lbry-sdk-ng
 ```
 
 Create a Python virtual environment for lbry-sdk:
 ```bash
-python3.7 -m venv lbry-venv
+python3.9 -m venv lbry-venv
 ```
 
 Activate virtual environment:
@@ -75,7 +63,7 @@ Activate virtual environment:
 source lbry-venv/bin/activate
 ```
 
-Make sure you're on Python 3.7+ as default in the virtual environment:
+Make sure you're on Python 3.9 as default in the virtual environment:
 ```bash
 python --version
 ```
@@ -94,7 +82,7 @@ To verify your installation, `which lbrynet` should return a path inside
 of the `lbry-venv` folder.
 ```bash
 (lbry-venv) $ which lbrynet
-/opt/lbry-sdk/lbry-venv/bin/lbrynet
+/opt/lbry-sdk-ng/lbry-venv/bin/lbrynet
 ```
 
 To exit the virtual environment simply use the command `deactivate`.
@@ -103,8 +91,8 @@ To exit the virtual environment simply use the command `deactivate`.
 
 Clone the repository:
 ```bash
-git clone https://github.com/lbryio/lbry-sdk.git
-cd lbry-sdk
+git clone https://github.com/kodxana/lbry-sdk-ng.git
+cd lbry-sdk-ng
 ```
 
 Create a Python virtual environment for lbry-sdk:
