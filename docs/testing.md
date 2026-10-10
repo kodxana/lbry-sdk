@@ -102,7 +102,10 @@ Tests run as an ordinary user, with no host directories mounted and no ports
 published. Unit tests get a network namespace with loopback only. Integration
 tests share Elasticsearch's loopback-only namespace so the SDK, Hub, and local
 regtest processes can communicate. There is no external network route during
-tests. Wallets, chains, and generated media live in temporary containers; the
+tests. The namespace reserves ports 50001-50100 for the test Hub listeners so
+outgoing connections cannot acquire them as ephemeral source ports between
+restarts. This setting applies only to the temporary container namespace.
+Wallets, chains, and generated media live in temporary containers; the
 runner removes its containers on success, failure, or interruption. Docker's
 images and build cache remain for later runs.
 
