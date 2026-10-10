@@ -822,7 +822,7 @@ class Daemon(metaclass=JSONRPCServerType):
     #                                                                          #
     ############################################################################
 
-    def jsonrpc_stop(self):  # pylint: disable=no-self-use
+    def jsonrpc_stop(self):
         """
         Stop lbrynet API server.
 
@@ -974,7 +974,7 @@ class Daemon(metaclass=JSONRPCServerType):
                 response[component.component_name] = status
         return response
 
-    def jsonrpc_version(self):  # pylint: disable=no-self-use
+    def jsonrpc_version(self):
         """
         Get lbrynet API server version information
 
@@ -5256,7 +5256,7 @@ class Daemon(metaclass=JSONRPCServerType):
     Controls and queries tracemalloc memory tracing tools for troubleshooting.
     """
 
-    def jsonrpc_tracemalloc_enable(self):  # pylint: disable=no-self-use
+    def jsonrpc_tracemalloc_enable(self):
         """
         Enable tracemalloc memory tracing
 
@@ -5272,7 +5272,7 @@ class Daemon(metaclass=JSONRPCServerType):
         tracemalloc.start()
         return tracemalloc.is_tracing()
 
-    def jsonrpc_tracemalloc_disable(self):  # pylint: disable=no-self-use
+    def jsonrpc_tracemalloc_disable(self):
         """
         Disable tracemalloc memory tracing
 
@@ -5288,7 +5288,7 @@ class Daemon(metaclass=JSONRPCServerType):
         tracemalloc.stop()
         return tracemalloc.is_tracing()
 
-    def jsonrpc_tracemalloc_top(self, items: int = 10):  # pylint: disable=no-self-use
+    def jsonrpc_tracemalloc_top(self, items: int = 10):
         """
         Show most common objects, the place that created them and their size.
 

@@ -459,7 +459,7 @@ class LBCDNode:
             log.exception('failed to stop lbcd', exc_info=e)
             raise
         finally:
-            self.log.info("Done shutting down " + self.daemon_bin)
+            self.log.info("Done shutting down %s", self.daemon_bin)
             self.stopped = True
             if cleanup:
                 self.cleanup()
@@ -592,7 +592,7 @@ class LBCWalletNode:
             log.exception('failed to stop lbcwallet', exc_info=e)
             raise
         finally:
-            self.log.info("Done shutting down " + self.lbcwallet_bin)
+            self.log.info("Done shutting down %s", self.lbcwallet_bin)
             self.stopped = True
             if cleanup:
                 self.cleanup()

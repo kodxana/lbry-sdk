@@ -78,7 +78,7 @@ class DeterministicChannelKeyManager:
 
 class AddressManager:
 
-    name: str
+    name: typing.ClassVar[str]
 
     __slots__ = 'account', 'public_key', 'chain_number', 'address_generator_lock'
 

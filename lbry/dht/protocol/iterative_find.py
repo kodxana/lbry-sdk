@@ -116,7 +116,7 @@ class IterativeFinder(AsyncIterator):
         """
         raise NotImplementedError()
 
-    def get_initial_result(self) -> typing.List['KademliaPeer']:  #pylint: disable=no-self-use
+    def get_initial_result(self) -> typing.List['KademliaPeer']:
         """
         Get an initial or cached result to be put into the Queue. Used for findValue requests where the blob
         has peers in the local data store of blobs announced to us
