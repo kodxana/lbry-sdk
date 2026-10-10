@@ -11,7 +11,7 @@ The SDK now shares its protobuf 3.20.3 requirement, and the test constraints pin
 Hub's additional `rehash==1.0.0` dependency. The findings below describe the
 original audit; these changes do not establish support for a newer interpreter.
 
-The pinned Hub's [migration notes](https://github.com/kodxana/scribe/blob/4ce2bfc4734c4958f2bab176d955060206cd9a4c/docs/testing.md#reorgs-across-a-schema-upgrade)
+The pinned Hub's [migration notes](https://github.com/kodxana/lbry-hub-ng/blob/4ce2bfc4734c4958f2bab176d955060206cd9a4c/docs/testing.md#reorgs-across-a-schema-upgrade)
 describe recovery when a reorg crosses a database schema upgrade. Its default
 RocksDB dependency remains the published 0.8.2 wheel. The maintained binding's
 close fixes are tested separately in Hub CI; changing the Hub pin does not

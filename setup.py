@@ -11,9 +11,9 @@ setup(
     name=__name__,
     version=__version__,
     author="LBRY Inc.",
-    author_email="hello@lbry.com",
-    url="https://lbry.com",
-    description="A decentralized media library and marketplace",
+    maintainer="LBRY NG contributors",
+    url="https://github.com/kodxana/lbry-sdk-ng",
+    description="Community-maintained LBRY SDK for decentralized content applications",
     long_description=long_description,
     long_description_content_type="text/markdown",
     keywords="lbry protocol media",
@@ -57,7 +57,7 @@ setup(
             'jsonschema==4.4.0',
         ],
         'hub': [
-            'hub@git+https://github.com/kodxana/scribe.git@4ce2bfc4734c4958f2bab176d955060206cd9a4c'
+            'hub@git+https://github.com/kodxana/lbry-hub-ng.git@4ce2bfc4734c4958f2bab176d955060206cd9a4c'
         ]
     },
     classifiers=[
