@@ -161,12 +161,11 @@ class TestStreamManager(BlobExchangeTestBase):
         await self.setup_stream_manager()
         if after_setup:
             after_setup()
-        checked_analytics_event = False
+        analytics_event = self.loop.create_future()
 
         async def _check_post(event):
-            check_post(event)
-            nonlocal checked_analytics_event
-            checked_analytics_event = True
+            if event['event'] == 'Time To First Bytes' and not analytics_event.done():
+                analytics_event.set_result(event)
 
         self.stream_manager.analytics_manager._post = _check_post
         if error:
@@ -174,8 +173,7 @@ class TestStreamManager(BlobExchangeTestBase):
                 await self.file_manager.download_from_uri(self.uri, self.exchange_rate_manager)
         else:
             await self.file_manager.download_from_uri(self.uri, self.exchange_rate_manager)
-        await asyncio.sleep(0)
-        self.assertTrue(checked_analytics_event)
+        check_post(await asyncio.wait_for(analytics_event, 1))
 
     async def test_time_to_first_bytes(self):
         def check_post(event):
@@ -207,7 +205,8 @@ class TestStreamManager(BlobExchangeTestBase):
 
             self.assertEqual(event['event'], 'Time To First Bytes')
             self.assertEqual(event['properties']['tried_peers_count'], 1)
-            self.assertEqual(event['properties']['active_peer_count'], 1)
+            # The first blob request can finish before analytics is queued.
+            self.assertIn(event['properties']['active_peer_count'], (0, 1))
             self.assertEqual(event['properties']['connection_failures_count'], 0)
             self.assertTrue(event['properties']['use_fixed_peers'])
             self.assertTrue(event['properties']['added_fixed_peers'])
@@ -248,7 +247,8 @@ class TestStreamManager(BlobExchangeTestBase):
 
             self.assertEqual(event['event'], 'Time To First Bytes')
             self.assertEqual(event['properties']['tried_peers_count'], 1)
-            self.assertEqual(event['properties']['active_peer_count'], 1)
+            # The first blob request can finish before analytics is queued.
+            self.assertIn(event['properties']['active_peer_count'], (0, 1))
             self.assertTrue(event['properties']['use_fixed_peers'])
             self.assertTrue(event['properties']['added_fixed_peers'])
             self.assertEqual(event['properties']['fixed_peer_delay'], 0.0)

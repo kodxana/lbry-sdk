@@ -32,7 +32,10 @@ class TestBlobAnnouncer(AsyncioTestCase):
                     continue
                 self.add_peer_to_routing_table(first_peer, second_peer)
                 self.add_peer_to_routing_table(second_peer, first_peer)
-        await self.advance(0.1)  # just to make pings go through
+        # add_peer queues work; wait for routing-table inserts, including any
+        # probes performed while splitting a bucket, before querying contacts.
+        while any(node.protocol._to_add or node.protocol._split_lock.locked() for node in self.nodes.values()):
+            await self.advance(0.1)
         self.node.joined.set()
         self.node._refresh_task = self.loop.create_task(self.node.refresh_node())
         self.storage = SQLiteStorage(self.conf, ":memory:", self.loop, self.loop.time)
@@ -69,6 +72,7 @@ class TestBlobAnnouncer(AsyncioTestCase):
             self.node.stop()
             for n in self.nodes.values():
                 n.stop()
+            await self.storage.close()
 
     async def chain_peer(self, node_id, address):
         previous_last_node = self.nodes[len(self.nodes) - 1]
