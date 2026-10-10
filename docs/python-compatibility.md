@@ -5,14 +5,14 @@ Audited October 9, 2026, at SDK revision
 `setup.py`, `929448d64bcbe6c5e476757ec78456beaa85e56a`.
 
 The Hub baseline has since moved to the maintained fork at
-`d54af293470a63a3cfd2c899cf9718ab16c9a98b`, which includes upstream `ebcc6e5`,
-the legacy database migration and schema rollback fixes, and the maintained
-RocksDB binding on Linux x86-64 with CPython 3.9.
+`cd789a2b26a4c78531ad86989a19292446f22a67`, which includes upstream `ebcc6e5`,
+the legacy database migration and schema rollback fixes, orderly service
+shutdown, and the maintained RocksDB binding on Linux x86-64 with CPython 3.9.
 The SDK now shares its protobuf 3.20.3 requirement, and the test constraints pin
 Hub's additional `rehash==1.0.0` dependency. The findings below describe the
 original audit; these changes do not establish support for a newer interpreter.
 
-The pinned Hub's [migration notes](https://github.com/kodxana/lbry-hub-ng/blob/d54af293470a63a3cfd2c899cf9718ab16c9a98b/docs/testing.md#reorgs-across-a-schema-upgrade)
+The pinned Hub's [migration notes](https://github.com/kodxana/lbry-hub-ng/blob/cd789a2b26a4c78531ad86989a19292446f22a67/docs/testing.md#reorgs-across-a-schema-upgrade)
 describe recovery when a reorg crosses a database schema upgrade. On Linux
 x86-64 with CPython 3.9, Hub installs the published `lbry-rocksdb-ng` 0.8.3
 wheel from GitHub with a SHA-256 pin. It includes the database-close, iterator

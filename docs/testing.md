@@ -166,6 +166,12 @@ loaded from the database does not need to emit another write-start event.
 
 ## Claim search and resolve tests
 
+The blockchain suite checks that stopping a regtest SPV node finishes its
+search reader and notifier tasks before deleting the temporary Elasticsearch
+index. The pinned Hub waits for task cleanup before closing shared resources.
+Normal Hub shutdown preserves the index; the regtest harness requests deletion
+explicitly.
+
 The claims suite checks the pinned Hub's 2,048-ID search limit. A request at the
 limit returns the expected claim; one above it reports an RPC error and leaves
 the same connection usable. The resolve test checks every result across three
