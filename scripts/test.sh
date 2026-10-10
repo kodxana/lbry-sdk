@@ -20,7 +20,7 @@ case "$suite" in
             wallet) set -- discover -v tests.unit.wallet ;;
             lint) set -- python -m pylint --rcfile=setup.cfg lbry ;;
             build)
-                set -- sh -ec 'python -m PyInstaller --noconfirm --onefile --name lbrynet lbry/extras/cli.py; dist/lbrynet --version'
+                set -- sh -ec 'python -m PyInstaller --noconfirm --additional-hooks-dir=scripts --onefile --name lbrynet lbry/extras/cli.py; dist/lbrynet --version'
                 ;;
         esac
         ;;

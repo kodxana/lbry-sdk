@@ -5,6 +5,8 @@
 !docker/
 !docker/test-constraints.txt
 !docker/build-requirements.txt
+!scripts/
+!scripts/hook-coincurve.py
 !lbry/
 !lbry/**
 !tests/

@@ -1,4 +1,3 @@
-"""Include the backend imported by coincurve's Windows CFFI extension."""
-from PyInstaller.compat import is_win
+"""Include the backend imported by coincurve's CFFI extension."""
 
-hiddenimports = ['coincurve._cffi_backend'] if is_win else []
+hiddenimports = ['coincurve._cffi_backend']
