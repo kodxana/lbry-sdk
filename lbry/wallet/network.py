@@ -62,19 +62,19 @@ class ClientSession(BaseClientSession):
     async def send_request(self, method, args=()):
         log.debug("send %s%s to %s:%i (%i timeout)", method, tuple(args), self.server[0], self.server[1], self.timeout)
         try:
-            await self._concurrency.acquire()
-            if method == 'server.version':
-                return await self.send_timed_server_version_request(args, self.timeout)
-            request = asyncio.ensure_future(super().send_request(method, args))
-            while not request.done():
-                done, pending = await asyncio.wait([request], timeout=self.timeout)
-                if pending:
-                    log.debug("Time since last packet: %s", perf_counter() - self.last_packet_received)
-                    if (perf_counter() - self.last_packet_received) < self.timeout:
-                        continue
-                    log.warning("timeout sending %s to %s:%i", method, *self.server)
-                    raise asyncio.TimeoutError
-                if done:
+            async with self._concurrency:
+                if method == 'server.version':
+                    return await self.send_timed_server_version_request(args, self.timeout)
+                request = asyncio.ensure_future(super().send_request(method, args))
+                try:
+                    while not request.done():
+                        _, pending = await asyncio.wait([request], timeout=self.timeout)
+                        if pending:
+                            log.debug("Time since last packet: %s", perf_counter() - self.last_packet_received)
+                            if (perf_counter() - self.last_packet_received) < self.timeout:
+                                continue
+                            log.warning("timeout sending %s to %s:%i", method, *self.server)
+                            raise asyncio.TimeoutError
                     try:
                         return request.result()
                     except ConnectionResetError:
@@ -83,6 +83,12 @@ class ClientSession(BaseClientSession):
                             self.server[0], method, len(args), len(json.dumps(args))
                         )
                         raise
+                finally:
+                    # asyncio.wait does not cancel the RPC task when its caller
+                    # times out or is cancelled. Also retrieve any error that
+                    # arrived just before cancellation.
+                    request.cancel()
+                    await asyncio.gather(request, return_exceptions=True)
         except (RPCError, ProtocolError) as e:
             log.warning("Wallet server (%s:%i) returned an error. Code: %s Message: %s",
                         *self.server, *e.args)
@@ -93,10 +99,7 @@ class ClientSession(BaseClientSession):
             raise
         except asyncio.CancelledError:
             log.warning("cancelled sending %s to %s:%i", method, *self.server)
-            # self.synchronous_close()
             raise
-        finally:
-            self._concurrency.release()
 
     async def ensure_server_version(self, required=None, timeout=3):
         required = required or self.network.PROTOCOL_MAX_VERSION
