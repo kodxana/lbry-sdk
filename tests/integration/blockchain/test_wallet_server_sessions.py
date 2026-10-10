@@ -120,6 +120,8 @@ class TestUsagePayment(CommandTestCase):
         self.assertTrue(wallet_pay_service.running)
 
 class TestESSync(CommandTestCase):
+    # Three notifier reconnects may each wait for the Hub's 30-second retry.
+    TIMEOUT = 180
     async def test_stop_finishes_index_tasks_before_deleting_index(self):
         node = self.conductor.spv_node
         es_writer = node.es_writer
@@ -174,9 +176,17 @@ class TestESSync(CommandTestCase):
         await es_writer.stop_index(delete=True)
         await es_writer.stop()
         server_search_client.clear_caches()
-        self.assertEqual(0, len(await self.claim_search(order_by=['height'])))
+        async def wait_until_search_stops():
+            while server_search_client.ready.is_set():
+                await asyncio.sleep(0.01)
+
+        await asyncio.wait_for(wait_until_search_stops(), 10)
+        with self.assertRaises(RPCError) as unavailable:
+            await self.claim_search(order_by=['height'])
+        self.assertEqual(unavailable.exception.code, -32001)
 
         await es_writer.start(reindex=True)
+        await asyncio.wait_for(server_search_client.ready.wait(), 40)
         self.assertEqual(10, len(await self.claim_search(order_by=['height'])))
 
         # stop the es writer and advance the chain by 1, adding a new claim. upon resuming the es writer, it should
@@ -189,6 +199,7 @@ class TestESSync(CommandTestCase):
         await self.conductor.spv_node.writer.wait_until_block(current_height + 1)
 
         await es_writer.start()
+        await asyncio.wait_for(server_search_client.ready.wait(), 40)
         await generate_block_task
         self.assertEqual(11, len(await self.claim_search(order_by=['height'])))
 
@@ -201,6 +212,7 @@ class TestESSync(CommandTestCase):
         generate_block_task = asyncio.create_task(self.generate(1))
         await self.conductor.spv_node.writer.wait_until_block(current_height + 1)
         await es_writer.start(reindex=True)
+        await asyncio.wait_for(server_search_client.ready.wait(), 40)
         await generate_block_task
         self.assertEqual(10, len(await self.claim_search(order_by=['height'])))
 
