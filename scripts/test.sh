@@ -20,7 +20,12 @@ case "$suite" in
             wallet) set -- discover -v tests.unit.wallet ;;
             lint) set -- python -m pylint --rcfile=setup.cfg lbry ;;
             build)
-                set -- sh -ec 'python -m PyInstaller --noconfirm --additional-hooks-dir=scripts --onefile --name lbrynet lbry/extras/cli.py; dist/lbrynet --version'
+                set -- sh -ec '
+                    python -m PyInstaller --noconfirm --additional-hooks-dir=scripts --onefile --name lbrynet lbry/extras/cli.py
+                    python scripts/test_binary.py dist/lbrynet \
+                        --expected-version "$(python -c "import lbry; print(lbry.__version__)")" \
+                        --log-dir /tmp/binary
+                '
                 ;;
         esac
         ;;
@@ -112,6 +117,9 @@ if [ -n "${TEST_OUTPUT_DIR:-}" ] && [ -s "$run_dir/test.cid" ]; then
     docker cp "$test_id:/opt/baseline-packages.txt" "$TEST_OUTPUT_DIR/packages.txt"
     if [ "$suite" = build ]; then
         artifact=/opt/lbry-sdk/dist/lbrynet
+        docker cp "$test_id:/tmp/binary" "$TEST_OUTPUT_DIR/" || {
+            if [ "$result" -eq 0 ]; then result=1; fi
+        }
     elif [ "$suite" != lint ]; then
         artifact=/tmp/coverage.xml
     else

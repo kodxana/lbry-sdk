@@ -8,6 +8,7 @@ import asyncio
 import argparse
 import logging
 import logging.handlers
+from multiprocessing import freeze_support
 
 import aiohttp
 from aiohttp.web import GracefulExit
@@ -336,4 +337,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    # Dispatch frozen database workers before parsing normal CLI arguments.
+    freeze_support()
     sys.exit(main())

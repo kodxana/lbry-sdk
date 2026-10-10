@@ -1,0 +1,28 @@
+{
+    "accounts": [
+        {
+            "address_generator": {
+                "change": {
+                    "gap": 6,
+                    "maximum_uses_per_address": 1
+                },
+                "name": "deterministic-chain",
+                "receiving": {
+                    "gap": 20,
+                    "maximum_uses_per_address": 1
+                }
+            },
+            "certificates": {},
+            "encrypted": false,
+            "ledger": "lbc_regtest",
+            "modified_on": 1571762543,
+            "name": "Public test account",
+            "private_key": "tprv8ZgxMBicQKsPer3TV8qBxPHGwJFerfmoTYXm65otHeqbPMVtMsFrjAjn9yLnJB7Aj7ov6EzcqgiXqqsymuBCoSh6sgKaBynx9EfKsUrkV7y",
+            "public_key": "tpubD6NzVbkrYhZ4YK5FNnVnMnwPWKmb1zxi2r8YNbrBhvdzDqkezG5SufMeL8LjpQB8JYCnekbWsBnTbAUnHcV1b8eS9HUjQseg3bM7Z7PwX35",
+            "seed": "carbon smart garage balance margin twelve chest sword toast envelope bottom stomach absent"
+        }
+    ],
+    "name": "SDK 0.113 compatibility fixture",
+    "preferences": {},
+    "version": 1
+}
