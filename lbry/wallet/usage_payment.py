@@ -35,8 +35,8 @@ class WalletServerPayer:
                 if not self.running:
                     break
                 delay = max(self.payment_period / 24, 10)
-                log.warning("Payement failed. Will retry after %g seconds.", delay)
-                asyncio.sleep(delay)
+                log.warning("Payment failed. Will retry after %g seconds.", delay)
+                await asyncio.sleep(delay)
             except BaseException as e:
                 if not isinstance(e, asyncio.CancelledError):
                     log.exception("Unexpected exception. Payment task exiting early.")
