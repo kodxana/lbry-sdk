@@ -13,13 +13,20 @@ instead of accessing OpenSSL's private memory. Legacy 120-byte states retain
 their exact bytes until updated, and database reopen/rollback tests cover them.
 The Python 3.13 RocksDB wheel keeps the existing 6.25.3 storage engine.
 
-The normal Windows install passes dependency checks and 159 wallet tests
-(five Unix-only skips). The normal Linux Hub install passes 77 database/RPC
-tests, including the protobuf compatibility checks. Both projects now use
-protobuf 7.36.2 with reproducibly generated modules and unchanged deployed
-wire definitions. Full SDK integration and native build validation for the
-combined change are still pending. No mainnet database or real wallet is used
-in these checks.
+The Linux unit suite contains 410 tests (two skips). Native Windows and Intel
+macOS run 160 wallet tests, 25 schema tests and 17 configuration tests; Windows
+skips five Unix-only wallet cases and two configuration cases. The Hub suite
+contains 79 database/RPC tests, including real-socket shutdown regressions.
+Both projects use protobuf 7.36.2 with reproducibly generated modules and
+unchanged deployed wire definitions.
+
+Full validation also requires all six SDK regtest groups, Hub resolve/session
+tests against published and rebuilt RocksDB wheels, and executable builds on
+all three platforms. Results and release status are recorded in
+[SDK PR #20](https://github.com/kodxana/lbry-sdk-ng/pull/20) and
+[Hub PR #9](https://github.com/kodxana/lbry-hub-ng/pull/9). See the
+[candidate notes](releases/0.114.0rc1.md) for installation changes. These checks
+use no mainnet database or real wallet funds.
 
 The audit below records the earlier Python 3.9 baseline and explains the
 upgrade decisions. Its old package pins describe that historical environment.
