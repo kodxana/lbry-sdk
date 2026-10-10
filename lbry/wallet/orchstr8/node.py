@@ -609,7 +609,16 @@ class LBCWalletNode:
         process = await asyncio.create_subprocess_exec(
             *cmnd_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-        out, err = await process.communicate()
+        try:
+            out, err = await process.communicate()
+        except asyncio.CancelledError:
+            # Cancelling communicate() does not stop the command's process.
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+            await process.communicate()
+            raise
         result = out.decode().strip()
         err = err.decode().strip()
         if len(result) <= 0 and err.startswith('-'):
