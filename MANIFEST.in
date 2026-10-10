@@ -2,3 +2,5 @@ include README.md
 include CHANGELOG.md
 include LICENSE
 recursive-include lbry *.txt *.py
+recursive-include lbry/schema *.proto *.md Makefile
+include scripts/regenerate_schema.py
