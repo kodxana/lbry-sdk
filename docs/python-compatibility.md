@@ -101,10 +101,16 @@ reported the same failures:
 | Passing a coroutine to `asyncio.wait` | `TypeError: Passing coroutines is forbidden, use tasks explicitly.` |
 | Constructing `TorrentHandle` with a dummy handle | `TypeError: Event.__init__() got an unexpected keyword argument 'loop'` |
 
-These are isolated compatibility failures, not full SDK runs. Raw-coroutine
-waits remain in `lbry/testcase.py`, and torrent events still use `loop=` in
-`lbry/torrent/session.py`. Other callers must be checked individually; many
-existing `asyncio.wait` calls already receive tasks.
+These were isolated compatibility failures, not full SDK runs. The test runner
+now uses `IsolatedAsyncioTestCase`, with standard-library regression coverage
+on Python 3.9, 3.12, 3.13 and 3.14. Transaction test helpers now schedule their
+coroutines explicitly, propagate failures and timeouts, and cancel and drain
+unfinished operations. Torrent events are created on the session loop without
+the removed `loop=` argument; adding native torrents stays in the executor.
+The focused async and torrent tests pass on Windows Python 3.9 and 3.13, using
+libtorrent 2.0.6 and 2.0.15 respectively. The SDK dependency pin remains 2.0.6.
+Production raw-coroutine waits in the daemon and wallet event controller still
+need migration and runtime coverage before full Python 3.13 testing.
 
 ## Hub constraints
 

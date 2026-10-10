@@ -6,6 +6,18 @@ from time import monotonic
 import unittest
 
 
+async def wait_for_tasks(*awaitables, timeout=None):
+    """Wait for test operations, cancelling and draining siblings on failure."""
+    tasks = [asyncio.ensure_future(awaitable) for awaitable in awaitables]
+    try:
+        return await asyncio.wait_for(asyncio.gather(*tasks), timeout)
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
 class AsyncioTestCase(unittest.IsolatedAsyncioTestCase):
     LOOP_SLOW_CALLBACK_DURATION = 0.2
     TIMEOUT = 120.0

@@ -4,6 +4,7 @@ import random
 import lbry.wallet.rpc.jsonrpc
 from lbry.wallet.transaction import Transaction, Output, Input
 from lbry.testcase import IntegrationTestCase
+from lbry.testcase_async import wait_for_tasks
 from lbry.wallet.util import satoshis_to_coins, coins_to_satoshis
 from lbry.wallet.manager import WalletManager
 
@@ -46,8 +47,8 @@ class BasicTransactionTests(IntegrationTestCase):
                 )],
                 [self.account], self.account
             ))
-        await asyncio.wait([self.broadcast(tx) for tx in txs])
-        await asyncio.wait([self.ledger.wait(tx) for tx in txs])
+        await wait_for_tasks(*(self.broadcast(tx) for tx in txs))
+        await wait_for_tasks(*(self.ledger.wait(tx) for tx in txs))
 
         # verify that a previous bug which failed to save TXIs doesn't come back
         # this check must happen before generating a new block
@@ -57,7 +58,7 @@ class BasicTransactionTests(IntegrationTestCase):
         ]))
 
         await self.generate(1)
-        await asyncio.wait([self.ledger.wait(tx) for tx in txs])
+        await wait_for_tasks(*(self.ledger.wait(tx) for tx in txs))
         await self.assertBalance(self.account, '199.99876')
 
         # 10 of the UTXOs have been split into a 1 coin UTXO and a 9 UTXO change

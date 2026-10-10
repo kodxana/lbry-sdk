@@ -22,9 +22,9 @@ class TorrentHandle:
         self._loop = loop
         self._executor = executor
         self._handle: libtorrent.torrent_handle = handle
-        self.started = asyncio.Event(loop=loop)
-        self.finished = asyncio.Event(loop=loop)
-        self.metadata_completed = asyncio.Event(loop=loop)
+        self.started = asyncio.Event()
+        self.finished = asyncio.Event()
+        self.metadata_completed = asyncio.Event()
         self.size = 0
         self.total_wanted_done = 0
         self.name = ''
@@ -171,15 +171,16 @@ class TorrentSession:
             params['save_path'] = download_directory
         handle = self._session.add_torrent(params)
         handle.force_dht_announce()
-        self._handles[btih] = TorrentHandle(self._loop, self._executor, handle)
+        return handle
 
     def full_path(self, btih):
         return self._handles[btih].largest_file
 
     async def add_torrent(self, btih, download_path):
-        await self._loop.run_in_executor(
+        handle = await self._loop.run_in_executor(
             self._executor, self._add_torrent, btih, download_path
         )
+        self._handles[btih] = TorrentHandle(self._loop, self._executor, handle)
         self._handles[btih].tasks.append(self._loop.create_task(self._handles[btih].status_loop()))
         await self._handles[btih].metadata_completed.wait()
         if self.wait_start:

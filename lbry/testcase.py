@@ -11,6 +11,7 @@ from binascii import unhexlify
 from functools import partial
 
 from lbry.testcase_async import AsyncioTestCase, AdvanceTimeTestCase  # pylint: disable=unused-import
+from lbry.testcase_async import wait_for_tasks
 from lbry.wallet import WalletManager, Wallet, Ledger, Account, Transaction
 from lbry.conf import Config
 from lbry.wallet.util import satoshis_to_coins
@@ -347,15 +348,9 @@ class CommandTestCase(IntegrationTestCase):
         return daemon
 
     async def confirm_tx(self, txid, ledger=None):
-        """ Wait for tx to be in mempool, then generate a block, wait for tx to be in a block. """
-        # await (ledger or self.ledger).on_transaction.where(lambda e: e.tx.id == txid)
+        """Generate a block and wait for a transaction notification."""
         on_tx = (ledger or self.ledger).on_transaction.where(lambda e: e.tx.id == txid)
-        await asyncio.wait([self.generate(1), on_tx], timeout=5)
-
-        # # actually, if it's in the mempool or in the block we're fine
-        # await self.generate_and_wait(1, [txid], ledger=ledger)
-        # return txid
-
+        await wait_for_tasks(self.generate(1), on_tx, timeout=5)
         return txid
 
     async def on_transaction_dict(self, tx):
@@ -523,9 +518,9 @@ class CommandTestCase(IntegrationTestCase):
     async def txo_spend(self, *args, confirm=True, **kwargs):
         txs = await self.daemon.jsonrpc_txo_spend(*args, **kwargs)
         if confirm:
-            await asyncio.wait([self.ledger.wait(tx) for tx in txs])
+            await wait_for_tasks(*(self.ledger.wait(tx) for tx in txs))
             await self.generate(1)
-            await asyncio.wait([self.ledger.wait(tx, self.blockchain.block_expected) for tx in txs])
+            await wait_for_tasks(*(self.ledger.wait(tx, self.blockchain.block_expected) for tx in txs))
         return self.sout(txs)
 
     async def blob_clean(self):

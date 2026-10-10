@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from lbry.testcase import IntegrationTestCase, WalletNode
+from lbry.testcase_async import wait_for_tasks
 from lbry.constants import CENT
 from lbry.wallet import WalletManager, RegTestLedger, Transaction, Output
 
@@ -74,17 +75,17 @@ class SyncTests(IntegrationTestCase):
             [account1], account1
         )
         await self.broadcast(tx)
-        await asyncio.wait([
+        await wait_for_tasks(
             account0.ledger.wait(tx),
             account1.ledger.wait(tx),
             account2.ledger.wait(tx),
-        ])
+        )
         await self.generate(1)
-        await asyncio.wait([
+        await wait_for_tasks(
             account0.ledger.wait(tx),
             account1.ledger.wait(tx),
             account2.ledger.wait(tx),
-        ])
+        )
         self.assertEqual(await account0.get_address_count(chain=0), 21)
         self.assertGreater(await account1.get_address_count(chain=1), 6)
         self.assertGreater(await account2.get_address_count(chain=1), 6)
