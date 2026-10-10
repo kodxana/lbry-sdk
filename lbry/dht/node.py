@@ -176,14 +176,18 @@ class Node:
                     await self._storage.get_persisted_kademlia_peers()
                 ) if self._storage else []
                 if not seed_peers:
-                    try:
-                        seed_peers.extend(peers_from_urls([
-                            (None, await resolve_host(address, udp_port, 'udp'), udp_port, None)
-                            for address, udp_port in known_node_urls or []
-                        ]))
-                    except socket.gaierror:
+                    resolved_seeds = []
+                    for address, udp_port in known_node_urls or []:
+                        try:
+                            resolved_address = await resolve_host(address, udp_port, 'udp')
+                        except socket.gaierror as error:
+                            log.warning("Failed to resolve DHT seed %s:%i: %s", address, udp_port, error)
+                            continue
+                        resolved_seeds.append((None, resolved_address, udp_port, None))
+                    if known_node_urls and not resolved_seeds:
                         await asyncio.sleep(30)
                         continue
+                    seed_peers = peers_from_urls(resolved_seeds)
 
                 self.protocol.peer_manager.reset()
                 self.protocol.ping_queue.enqueue_maybe_ping(*seed_peers, delay=0.0)
