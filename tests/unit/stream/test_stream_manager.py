@@ -141,6 +141,7 @@ class TestStreamManager(BlobExchangeTestBase):
         self.sd_hash = descriptor.sd_hash
         self.mock_wallet, self.uri = await get_mock_wallet(self.sd_hash, self.client_storage, self.client_wallet_dir,
                                                            balance, fee)
+        self.addCleanup(self.mock_wallet.ledger.db.close)
         analytics_manager = AnalyticsManager(
             self.client_config,
             binascii.hexlify(generate_id()).decode(),
@@ -155,6 +156,7 @@ class TestStreamManager(BlobExchangeTestBase):
             self.loop, self.client_config, self.mock_wallet, self.client_storage, analytics_manager
         )
         self.file_manager.source_managers['stream'] = self.stream_manager
+        self.addCleanup(self.file_manager.stop)
         self.exchange_rate_manager = get_fake_exchange_rate_manager()
 
     async def _test_time_to_first_bytes(self, check_post, error=None, after_setup=None):

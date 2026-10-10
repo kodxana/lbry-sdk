@@ -64,9 +64,13 @@ class BlobExchangeTestBase(AsyncioTestCase):
         self.server_from_client = make_kademlia_peer(b'1' * 48, "127.0.0.1", tcp_port=33333, allow_localhost=True)
 
         await self.client_storage.open()
+        self.addCleanup(self.client_storage.close)
         await self.server_storage.open()
+        self.addCleanup(self.server_storage.close)
         await self.client_blob_manager.setup()
+        self.addCleanup(self.client_blob_manager.stop)
         await self.server_blob_manager.setup()
+        self.addCleanup(self.server_blob_manager.stop)
 
         self.server.start_server(33333, '127.0.0.1')
         self.addCleanup(self.server.stop_server)
