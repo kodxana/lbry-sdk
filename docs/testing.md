@@ -166,6 +166,12 @@ loaded from the database does not need to emit another write-start event.
 
 ## Claim search and resolve tests
 
+The blockchain suite also opens a TCP connection to the Hub, requests a server
+banner, and stops the regtest SPV node. It checks that the client disconnects,
+both session-maintenance tasks finish, and the listener and session registries
+are empty. This regression fails with the previous Hub pin because its
+maintenance tasks remain active after shutdown.
+
 The blockchain suite checks that stopping a regtest SPV node finishes its
 search reader and notifier tasks before deleting the temporary Elasticsearch
 index. The pinned Hub waits for task cleanup before closing shared resources.
