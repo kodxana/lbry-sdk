@@ -8,6 +8,13 @@ this image is a test environment, not a deployment image.
 See the [Python compatibility audit](python-compatibility.md) for the known
 installation and runtime blockers and the proposed migration order.
 
+The Linux test image installs the pinned Hub with `lbry-rocksdb-ng` 0.8.3 from
+its hash-pinned GitHub release. Docker rebuilds the environment when these
+dependency pins change. For an existing source installation with the `hub`
+extra, create a fresh virtual environment: the old `lbry-rocksdb` distribution
+must not coexist with the maintained binding. Wallet and Hub database
+directories do not need to be replaced.
+
 ## Requirements
 
 - Docker with Linux containers and BuildKit, on Linux or through WSL2 on Windows.

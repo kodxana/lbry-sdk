@@ -5,17 +5,26 @@ Audited October 9, 2026, at SDK revision
 `setup.py`, `929448d64bcbe6c5e476757ec78456beaa85e56a`.
 
 The Hub baseline has since moved to the maintained fork at
-`4ce2bfc4734c4958f2bab176d955060206cd9a4c`, which includes upstream `ebcc6e5`
-and the legacy database migration and schema rollback fixes.
+`d54af293470a63a3cfd2c899cf9718ab16c9a98b`, which includes upstream `ebcc6e5`,
+the legacy database migration and schema rollback fixes, and the maintained
+RocksDB binding on Linux x86-64 with CPython 3.9.
 The SDK now shares its protobuf 3.20.3 requirement, and the test constraints pin
 Hub's additional `rehash==1.0.0` dependency. The findings below describe the
 original audit; these changes do not establish support for a newer interpreter.
 
-The pinned Hub's [migration notes](https://github.com/kodxana/lbry-hub-ng/blob/4ce2bfc4734c4958f2bab176d955060206cd9a4c/docs/testing.md#reorgs-across-a-schema-upgrade)
-describe recovery when a reorg crosses a database schema upgrade. Its default
-RocksDB dependency remains the published 0.8.2 wheel. The maintained binding's
-close fixes are tested separately in Hub CI; changing the Hub pin does not
-distribute that binding.
+The pinned Hub's [migration notes](https://github.com/kodxana/lbry-hub-ng/blob/d54af293470a63a3cfd2c899cf9718ab16c9a98b/docs/testing.md#reorgs-across-a-schema-upgrade)
+describe recovery when a reorg crosses a database schema upgrade. On Linux
+x86-64 with CPython 3.9, Hub installs the published `lbry-rocksdb-ng` 0.8.3
+wheel from GitHub with a SHA-256 pin. It includes the database-close, iterator
+and snapshot fixes while retaining RocksDB 6.25.3. The wheel requires glibc
+2.31 or newer; Alpine/musl is not supported. Other environments retain Hub's
+legacy `lbry-rocksdb==0.8.2` requirement and are not newly validated here.
+
+Use a fresh virtual environment when upgrading an SDK installation with the
+`hub` extra. The old and new distributions own the same `rocksdb` files and
+must not coexist; an in-place upgrade does not remove the old binding.
+Keep wallet and Hub database directories intact when replacing the Python
+environment. The SDK without the `hub` extra does not install either binding.
 
 Protobuf 3.18.3 crashes on macOS when importing the legacy claim messages,
 consistent with [upstream issue #10691](https://github.com/protocolbuffers/protobuf/issues/10691).
