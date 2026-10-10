@@ -5,10 +5,17 @@ Audited October 9, 2026, at SDK revision
 `setup.py`, `929448d64bcbe6c5e476757ec78456beaa85e56a`.
 
 The Hub baseline has since moved to the maintained fork at
-`bfbe16a225bbe0033cf2dcf3dc9a3cb7644290fd`, which includes upstream `ebcc6e5`.
+`4ce2bfc4734c4958f2bab176d955060206cd9a4c`, which includes upstream `ebcc6e5`
+and the legacy database migration and schema rollback fixes.
 The SDK now shares its protobuf 3.20.3 requirement, and the test constraints pin
 Hub's additional `rehash==1.0.0` dependency. The findings below describe the
 original audit; these changes do not establish support for a newer interpreter.
+
+The pinned Hub's [migration notes](https://github.com/kodxana/scribe/blob/4ce2bfc4734c4958f2bab176d955060206cd9a4c/docs/testing.md#reorgs-across-a-schema-upgrade)
+describe recovery when a reorg crosses a database schema upgrade. Its default
+RocksDB dependency remains the published 0.8.2 wheel. The maintained binding's
+close fixes are tested separately in Hub CI; changing the Hub pin does not
+distribute that binding.
 
 Protobuf 3.18.3 crashes on macOS when importing the legacy claim messages,
 consistent with [upstream issue #10691](https://github.com/protocolbuffers/protobuf/issues/10691).
