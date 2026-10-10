@@ -15,6 +15,17 @@ for the selected Python installation. Windows needs Microsoft C++ Build Tools;
 macOS needs Xcode Command Line Tools. Install FFmpeg if you use video analysis
 or transcoding. A system protobuf compiler is not needed to run the SDK.
 
+On Intel macOS, cryptography also builds from source. Install its tools and
+select Homebrew's OpenSSL before installing the SDK:
+
+```sh
+brew install openssl@3 rust
+export OPENSSL_DIR="$(brew --prefix openssl@3)"
+export OPENSSL_STATIC=1
+```
+
+This follows the [cryptography build instructions](https://cryptography.io/en/latest/installation/#building-cryptography-on-macos).
+
 Use a fresh virtual environment when upgrading. Keep existing wallet and data
 directories intact. If you installed the `hub` extra, the old `lbry-rocksdb` and
 new `lbry-rocksdb-ng` packages must not share an environment: they install the

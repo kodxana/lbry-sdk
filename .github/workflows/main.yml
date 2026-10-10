@@ -110,17 +110,22 @@ jobs:
         with:
           version: '0.12.24'
           python-version: '3.13.15'
-          python-arch: x86_64
           activate-environment: true
           enable-cache: true
           cache-dependency-glob: |
             setup.py
             docker/test-constraints.txt
             docker/build-requirements.txt
+      - name: Prepare Intel macOS cryptography build
+        if: runner.os == 'macOS'
+        run: |
+          brew install openssl@3 rust
+          echo "OPENSSL_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+          echo "OPENSSL_STATIC=1" >> "$GITHUB_ENV"
       - name: Install Python 3.13 dependencies
         run: |
           uv pip install -c docker/test-constraints.txt pip setuptools wheel Cython
-          python -m pip install --no-build-isolation -c docker/test-constraints.txt -r docker/build-requirements.txt -e '.[test]'
+          python -m pip install -c docker/test-constraints.txt -r docker/build-requirements.txt -e '.[test]'
           python -m pip check
           mkdir -p ci-results
           python -m pip freeze > ci-results/packages.txt
