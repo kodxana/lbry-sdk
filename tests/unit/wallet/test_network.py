@@ -4,7 +4,7 @@ import json
 from unittest.mock import Mock, patch
 
 from lbry.testcase_async import AdvanceTimeTestCase
-from lbry.wallet.network import ClientSession
+from lbry.wallet.network import ClientSession, Network
 from lbry.wallet.rpc import RPCError, ProtocolError
 from lbry.wallet.rpc.jsonrpc import JSONRPCv2
 
@@ -164,6 +164,20 @@ class ClientSessionTests(AdvanceTimeTestCase):
             await caller
         self.assertTrue(request.cancelled())
         self.assertIsNone(self.session.response_time)
+        self.assertEqual(self.session.concurrency, 1)
+
+    async def test_release_label_does_not_change_negotiated_protocol(self):
+        self.session.network = Mock(
+            CLIENT_NAME=Network.CLIENT_NAME,
+            PROTOCOL_MAX_VERSION=Network.PROTOCOL_MAX_VERSION,
+            PROTOCOL_MIN_VERSION=Network.PROTOCOL_MIN_VERSION
+        )
+        caller = asyncio.create_task(self.session.ensure_server_version())
+        _, message = await self.sent.get()
+        self.assertEqual(message['method'], 'server.version')
+        self.assertEqual(message['params'], [Network.CLIENT_NAME, '0.113.0'])
+        self.respond(message, ['Hub', '0.113.0'])
+        self.assertEqual(await caller, ['Hub', '0.113.0'])
         self.assertEqual(self.session.concurrency, 1)
 
     async def test_server_version_timeout_stops_request(self):

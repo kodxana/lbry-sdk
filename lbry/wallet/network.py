@@ -156,7 +156,9 @@ class Network:
     CLIENT_NAME = "LBRY SDK " + CLIENT_VERSION
 
     PROTOCOL_MIN_VERSION = (0, 65, 0)
-    PROTOCOL_MAX_VERSION = __version__
+    # Release labels may contain an rc suffix; the unchanged wire protocol
+    # still uses a numeric version understood by existing wallet servers.
+    PROTOCOL_MAX_VERSION = "0.113.0"
 
     def __init__(self, ledger):
         self.ledger = ledger
