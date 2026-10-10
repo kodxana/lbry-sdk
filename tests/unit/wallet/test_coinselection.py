@@ -73,6 +73,25 @@ class TestCoinSelectionTests(BaseSelectionTestCase):
         self.assertListEqual([2 * CENT], [c.txo.amount for c in match])
         self.assertFalse(selector.exact_match)
 
+    def test_random_draw_preserves_seeded_selections(self):
+        # Captured from Python 3.9's shuffle(random=selector.random.random).
+        # Two draws also check how much of the random sequence is consumed.
+        vectors = {
+            'wallet': ([1, 12, 3, 2, 7], [2, 7, 1, 10, 5]),
+            '\x00': ([9, 12, 5], [3, 7, 4, 10]),
+            '': ([1, 7, 4, 6, 2, 8], [10, 2, 1, 11]),
+        }
+        fee = utxo(CENT).get_estimator(self.ledger).fee
+        for seed, selections in vectors.items():
+            selector = CoinSelector(20 * CENT, 2 * CENT, seed)
+            for expected in selections:
+                with self.subTest(seed=seed, expected=expected):
+                    pool = self.estimates(utxo(n * CENT + fee) for n in range(1, 13))
+                    match = selector.select(pool, 'random_draw')
+                    self.assertEqual([c.effective_amount // CENT for c in match], expected)
+                    self.assertGreaterEqual(sum(c.effective_amount for c in match), 22 * CENT)
+                    self.assertEqual(len({id(c) for c in match}), len(match))
+
     def test_pick(self):
         utxo_pool = self.estimates(
             utxo(1*CENT),
