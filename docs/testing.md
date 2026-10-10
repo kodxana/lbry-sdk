@@ -1,12 +1,11 @@
 # Local test baseline
 
-The Docker runner provides the historical Python 3.9 environment while work on
-newer Python versions is underway. It tests the current checkout, including
-uncommitted source changes. Python 3.9 and several dependencies are obsolete;
-this image is a test environment, not a deployment image.
+The Docker runner uses CPython 3.13 on Debian Bookworm. It tests the current
+checkout, including uncommitted source changes, with the dependency versions
+in `docker/test-constraints.txt`. This image is a test environment.
 
 See the [Python compatibility audit](python-compatibility.md) for the known
-installation and runtime blockers and the proposed migration order.
+historical installation findings and the migration status.
 
 The Linux test image installs the pinned Hub with `lbry-rocksdb-ng` 0.8.3 from
 its hash-pinned GitHub release. Docker rebuilds the environment when these
@@ -217,7 +216,7 @@ The `ci` workflow runs on pull requests, pushes to `master`, version tags, and
 manual dispatch. Linux lint, unit tests, and all six integration groups use the
 same container runner described above on Ubuntu 24.04. Windows 2022 and Intel
 macOS 15 run configuration tests and the full wallet unit suite natively using
-managed Python 3.9.25. The full wallet suite also runs in the Linux unit job.
+managed Python 3.13.15. The full wallet suite also runs in the Linux unit job.
 
 The native jobs build executables and check `--version`. A Linux build runs
 after the test jobs pass. Download `ci-*` artifacts for logs, package versions,
@@ -227,5 +226,5 @@ artifacts expire after 14 days. Coveralls credentials are not needed.
 The workflow has read-only repository permissions and does not publish releases.
 Version tags run validation and produce artifacts only. The legacy Slack
 notification is restricted to the upstream repository. Release publishing and
-release validation are separate maintenance work; CI binaries still use the
-historical Python and dependency baseline.
+release validation are separate maintenance work; passing CI does not publish
+a release or approve deployment against a production wallet.

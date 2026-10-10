@@ -18,7 +18,7 @@ setup(
     long_description_content_type="text/markdown",
     keywords="lbry protocol media",
     license='MIT',
-    python_requires='>=3.8',
+    python_requires='>=3.13,<3.14',
     packages=find_packages(exclude=('tests',)),
     zip_safe=False,
     entry_points={
@@ -28,36 +28,38 @@ setup(
         ],
     },
     install_requires=[
-        'aiohttp==3.7.4',
+        'aiohttp==3.14.4',
         'aioupnp==0.0.18',
-        'appdirs==1.4.3',
-        'certifi>=2021.10.08',
-        'colorama==0.3.7',
-        'distro==1.4.0',
-        'base58==1.0.0',
-        'cffi==1.13.2',
-        'cryptography==3.4.7',
+        'appdirs==1.4.4',
+        'asn1crypto==1.5.1',
+        'packaging==26.3',
+        'certifi==2026.7.22',
+        'colorama==0.4.6',
+        'distro==1.9.0',
+        'base58==2.1.1',
+        'cffi==2.1.1',
+        'cryptography==50.0.2',
         'protobuf==3.20.3',
-        'prometheus_client==0.7.1',
-        'ecdsa==0.13.3',
-        'pyyaml==5.3.1',
+        'prometheus_client==0.26.0',
+        'ecdsa==0.19.2',
+        'pyyaml==6.0.3',
         'docopt==0.6.2',
-        'hachoir==3.1.2',
-        'coincurve==15.0.0',
+        'hachoir==3.4.0',
+        'coincurve==21.0.0',
         'pbkdf2==1.3',
-        'filetype==1.0.9',
-        'libtorrent==2.0.6',
+        'filetype==1.2.0',
+        'libtorrent==2.0.15',
     ],
     extras_require={
         'lint': [
-            'pylint==2.13.9'
+            'pylint==4.1.2'
         ],
         'test': [
             'coverage',
-            'jsonschema==4.4.0',
+            'jsonschema==4.26.0',
         ],
         'hub': [
-            'hub@git+https://github.com/kodxana/lbry-hub-ng.git@9f871d83c1a8e030148fb754c143998085c93240'
+            'hub@git+https://github.com/kodxana/lbry-hub-ng.git@267ea67cc5aa85e4092b6fdc9f05764a8564cbe6'
         ]
     },
     classifiers=[

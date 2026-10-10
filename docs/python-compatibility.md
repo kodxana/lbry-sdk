@@ -1,5 +1,31 @@
 # Python compatibility audit
 
+## Python 3.13 migration
+
+The runtime branch now requires CPython 3.13 and updates the SDK and Hub's shared
+dependencies together. The Linux runner and native Windows/macOS jobs use this
+runtime. Python 3.14 remains excluded because the selected libtorrent release
+does not provide its wheels. Intel macOS requires version 15 or later.
+
+Asyncio coroutine waits, torrent events, timeout exception ordering and seeded
+coin selection have been updated. The Hub uses a portable SHA-256 state API
+instead of accessing OpenSSL's private memory. Legacy 120-byte states retain
+their exact bytes until updated, and database reopen/rollback tests cover them.
+The Python 3.13 RocksDB wheel keeps the existing 6.25.3 storage engine.
+
+The normal Windows install passes dependency checks and 159 wallet tests
+(five Unix-only skips); its executable builds and starts. The normal Linux
+Hub install passes 75 database/RPC tests. Full SDK integration and native macOS
+validation are still pending. Protobuf 3.20.3 is deliberately retained at this
+step; generated messages and their runtime must be upgraded together before a
+release candidate is ready. No mainnet database or real wallet is used in these
+checks.
+
+The audit below records the earlier Python 3.9 baseline and explains the
+upgrade decisions. Its old package pins describe that historical environment.
+
+## Historical audit
+
 Audited October 9, 2026, at SDK revision
 `52f707043fdd6bcdeea1f3d937e16e6128476e45` and the Hub revision pinned in
 `setup.py`, `929448d64bcbe6c5e476757ec78456beaa85e56a`.
