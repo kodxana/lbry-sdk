@@ -167,13 +167,17 @@ class ClientSessionTests(AdvanceTimeTestCase):
         self.assertEqual(self.session.concurrency, 1)
 
     async def test_server_version_timeout_stops_request(self):
-        caller, request, _ = await self.start_request('server.version')
+        caller, request, message = await self.start_request('server.version')
         await self.advance(5)
         with self.assertRaises(asyncio.TimeoutError):
             await caller
-        self.assertTrue(request.cancelled())
+        # Recent wait_for implementations run the request in the caller task,
+        # which finishes with TimeoutError rather than remaining cancelled.
+        self.assertTrue(request.done())
         self.assertIsNone(self.session.response_time)
         self.assertEqual(self.session.concurrency, 1)
+        self.respond(message, 'late version reply')
+        self.assertEqual(self.session.connection.pending_requests(), [])
 
     async def test_server_version_records_response_time(self):
         caller, _, message = await self.start_request('server.version', ['client', '0.65.0'])
