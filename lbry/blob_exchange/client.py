@@ -50,6 +50,10 @@ class BlobExchangeClientProtocol(asyncio.Protocol):
         if not self._response_fut:
             log.warning("Protocol received data before expected, probable race on keep alive. Closing transport.")
             return self.close()
+        if self._response_fut.cancelled():
+            # Cancellation may reach the future before the download task has
+            # resumed to close the transport. Discard a response in that gap.
+            return self.close()
         if self._blob_bytes_received and not self.writer.closed():
             return self._write(data)
 
