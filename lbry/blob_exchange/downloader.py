@@ -115,9 +115,10 @@ class BlobDownloader:
             if self.loop.is_running():
                 self.loop.call_soon(self.cleanup_active)
 
-    def close(self):
-        self.connection_failures.clear()
-        self.scores.clear()
+    def close(self, clear_statistics=True):
+        if clear_statistics:
+            self.connection_failures.clear()
+            self.scores.clear()
         self.ignored.clear()
         self.is_running.clear()
         for protocol in self.connections.values():

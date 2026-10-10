@@ -1,6 +1,7 @@
 import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 
+import lbry.wallet
 from lbry.conf import Config
 from lbry.dht import constants
 from lbry.dht.node import Node

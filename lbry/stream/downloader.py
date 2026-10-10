@@ -108,7 +108,8 @@ class StreamDownloader:
                 )
         except (Exception, asyncio.CancelledError):
             accumulate_task = self.accumulate_task
-            self.stop()
+            # FileManager reports this attempt's statistics after start raises.
+            self.stop(clear_statistics=False)
             if accumulate_task:
                 await asyncio.gather(accumulate_task, return_exceptions=True)
             raise
@@ -137,11 +138,11 @@ class StreamDownloader:
             self.time_to_first_bytes = self.loop.time() - start
         return decrypted
 
-    def stop(self):
+    def stop(self, clear_statistics=True):
         if self.accumulate_task:
             self.accumulate_task.cancel()
             self.accumulate_task = None
         if self.fixed_peers_handle:
             self.fixed_peers_handle.cancel()
             self.fixed_peers_handle = None
-        self.blob_downloader.close()
+        self.blob_downloader.close(clear_statistics=clear_statistics)
