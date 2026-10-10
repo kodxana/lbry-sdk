@@ -15,8 +15,9 @@ The Python 3.13 RocksDB wheel keeps the existing 6.25.3 storage engine.
 
 The Linux unit suite contains 410 tests (two skips). Native Windows and Intel
 macOS run 160 wallet tests, 25 schema tests and 17 configuration tests; Windows
-skips five Unix-only wallet cases and two configuration cases. The Hub suite
-contains 79 database/RPC tests, including real-socket shutdown regressions.
+skips five Unix-only wallet cases, and both platforms skip two configuration
+cases. The Hub suite contains 86 database/RPC tests, including real-socket
+shutdown and search-recovery regressions.
 Both projects use protobuf 7.36.2 with reproducibly generated modules and
 unchanged deployed wire definitions.
 
