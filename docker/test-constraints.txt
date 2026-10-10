@@ -44,7 +44,7 @@ platformdirs==4.12.4
 pluggy==1.6.0
 prometheus-client==0.26.0
 propcache==0.5.4
-protobuf==3.20.3
+protobuf==7.36.2
 pycparser==3.11
 pygments==2.21.0
 pyinstaller==6.22.3

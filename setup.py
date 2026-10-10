@@ -39,7 +39,7 @@ setup(
         'base58==2.1.1',
         'cffi==2.1.1',
         'cryptography==50.0.2',
-        'protobuf==3.20.3',
+        'protobuf==7.36.2',
         'prometheus_client==0.26.0',
         'ecdsa==0.19.2',
         'pyyaml==6.0.3',
@@ -59,7 +59,7 @@ setup(
             'jsonschema==4.26.0',
         ],
         'hub': [
-            'hub@git+https://github.com/kodxana/lbry-hub-ng.git@267ea67cc5aa85e4092b6fdc9f05764a8564cbe6'
+            'hub@git+https://github.com/kodxana/lbry-hub-ng.git@715f280a6c3be0791fa67593acecd95a2d9705af'
         ]
     },
     classifiers=[

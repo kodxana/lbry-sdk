@@ -14,12 +14,12 @@ their exact bytes until updated, and database reopen/rollback tests cover them.
 The Python 3.13 RocksDB wheel keeps the existing 6.25.3 storage engine.
 
 The normal Windows install passes dependency checks and 159 wallet tests
-(five Unix-only skips); its executable builds and starts. The normal Linux
-Hub install passes 75 database/RPC tests. Full SDK integration and native macOS
-validation are still pending. Protobuf 3.20.3 is deliberately retained at this
-step; generated messages and their runtime must be upgraded together before a
-release candidate is ready. No mainnet database or real wallet is used in these
-checks.
+(five Unix-only skips). The normal Linux Hub install passes 77 database/RPC
+tests, including the protobuf compatibility checks. Both projects now use
+protobuf 7.36.2 with reproducibly generated modules and unchanged deployed
+wire definitions. Full SDK integration and native build validation for the
+combined change are still pending. No mainnet database or real wallet is used
+in these checks.
 
 The audit below records the earlier Python 3.9 baseline and explains the
 upgrade decisions. Its old package pins describe that historical environment.
