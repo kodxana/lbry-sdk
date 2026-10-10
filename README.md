@@ -23,6 +23,11 @@ The [0.114.0rc1 candidate](docs/releases/0.114.0rc1.md) requires Python 3.13.
 Its release notes describe supported platforms, wallet and database compatibility
 checks, and the limits of the isolated test coverage.
 
+Successful CI runs also provide a `release-candidate` bundle with Windows,
+Linux and Intel macOS executables. Reviewed `v...rcN` tags publish these binaries
+and their checksums as GitHub prereleases after the complete test matrix passes;
+see the [release process](docs/releasing.md).
+
 ## Usage
 
 Run `lbrynet start` to launch the API server.

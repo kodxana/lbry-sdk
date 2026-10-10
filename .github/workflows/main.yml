@@ -19,6 +19,17 @@ defaults:
     shell: bash
 
 jobs:
+  release-tools:
+    name: release tooling
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test release packaging and publication guards
+        run: python3 -m unittest discover -v -s scripts/tests
+
   schema:
     name: generated schemas
     runs-on: ubuntu-24.04
@@ -168,7 +179,7 @@ jobs:
 
   build-linux:
     name: build / linux
-    needs: [schema, async-runner, linux-tests, native]
+    needs: [release-tools, schema, async-runner, linux-tests, native]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -196,3 +207,51 @@ jobs:
             ci-results/test.log
             ci-results/packages.txt
           retention-days: 14
+
+  package-release:
+    name: package release
+    needs: build-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: artifacts
+          digest-mismatch: error
+      - name: Package the tested binaries, checksums and reports
+        run: python3 scripts/release.py prepare
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-candidate
+          path: release/
+          if-no-files-found: error
+          retention-days: 90
+
+  publish-prerelease:
+    name: publish prerelease
+    needs: package-release
+    if: >-
+      github.repository == 'kodxana/lbry-sdk-ng' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      startsWith(github.ref, 'refs/tags/v') && contains(github.ref, 'rc')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-candidate
+          path: release
+          digest-mismatch: error
+      - name: Verify and publish the release candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release.py publish
