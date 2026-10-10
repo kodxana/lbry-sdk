@@ -91,10 +91,10 @@ tests. It can also be prepared for a native test run with:
 python -m tests.integration.claims.fixtures
 ```
 
-Python and Elasticsearch images are pinned by digest. Debian packages come from
-the August 1, 2025 snapshot, and the regtest archives have SHA-256 checks. These
-pins capture a historical test environment; Python source distributions are
-still built locally, so byte-for-byte image reproducibility is not guaranteed.
+Python and Elasticsearch images are pinned by digest, and the regtest archives
+have SHA-256 checks. Debian packages come from the Bookworm repositories.
+Python source distributions are built locally, so byte-for-byte image
+reproducibility is not guaranteed.
 Installed Python versions are recorded in
 `/opt/baseline-packages.txt` inside the image.
 
@@ -216,7 +216,9 @@ The `ci` workflow runs on pull requests, pushes to `master`, version tags, and
 manual dispatch. Linux lint, unit tests, and all six integration groups use the
 same container runner described above on Ubuntu 24.04. Windows 2022 and Intel
 macOS 15 run configuration tests and the full wallet unit suite natively using
-managed Python 3.13.15. The full wallet suite also runs in the Linux unit job.
+Python 3.13.15. The full wallet suite also runs in the Linux unit job.
+Intel macOS builds cryptography against Homebrew OpenSSL with static linking;
+it needs Rust and the Xcode command-line tools during installation.
 
 The native jobs build executables and check `--version`. A Linux build runs
 after the test jobs pass. Download `ci-*` artifacts for logs, package versions,
@@ -224,7 +226,7 @@ and per-suite coverage XML; `lbrynet-*` artifacts contain the binaries. These
 artifacts expire after 14 days. Coveralls credentials are not needed.
 
 The workflow has read-only repository permissions and does not publish releases.
-Version tags run validation and produce artifacts only. The legacy Slack
-notification is restricted to the upstream repository. Release publishing and
-release validation are separate maintenance work; passing CI does not publish
-a release or approve deployment against a production wallet.
+Version tags run validation and produce artifacts only. Follow the
+[release procedure](releasing.md) to prepare a community release from the
+validated commit. Passing CI does not publish a release or approve deployment
+against a production wallet.

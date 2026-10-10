@@ -1,3 +1,6 @@
 # Change Log
 
-This changelog is no longer up to date. For release notes, see https://github.com/lbryio/lbry-sdk/releases.
+Community release notes are in [docs/releases](docs/releases) and on the
+[LBRY SDK NG releases page](https://github.com/kodxana/lbry-sdk-ng/releases).
+The [upstream releases](https://github.com/lbryio/lbry-sdk/releases) describe
+historical LBRY Inc. versions.
