@@ -57,7 +57,7 @@ setup(
             'jsonschema==4.4.0',
         ],
         'hub': [
-            'hub@git+https://github.com/kodxana/scribe.git@bfbe16a225bbe0033cf2dcf3dc9a3cb7644290fd'
+            'hub@git+https://github.com/kodxana/scribe.git@4ce2bfc4734c4958f2bab176d955060206cd9a4c'
         ]
     },
     classifiers=[
