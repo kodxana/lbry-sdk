@@ -1,14 +1,86 @@
 import asyncio
+import socket
 import time
 import unittest
 import typing
-from lbry.testcase import AsyncioTestCase
+from unittest import mock
+from lbry.testcase import AsyncioTestCase, AdvanceTimeTestCase
 from tests import dht_mocks
 from lbry.conf import Config
 from lbry.dht import constants
 from lbry.dht.node import Node
 from lbry.dht.peer import PeerManager, make_kademlia_peer
 from lbry.extras.daemon.storage import SQLiteStorage
+
+
+class TestBootstrapDNS(AdvanceTimeTestCase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        self.loop.set_debug(False)
+
+    def make_node(self, address, urls=None):
+        node = Node(self.loop, PeerManager(self.loop), constants.generate_id(),
+                    4444, 4444, 3333, address)
+        self.addCleanup(node.stop)
+        node.start(address, urls)
+        return node
+
+    async def test_failed_hostname_does_not_block_other_seeds(self):
+        for failed_position in range(3):
+            with self.subTest(failed_position=failed_position), dht_mocks.mock_network_loop(self.loop):
+                seeds = [self.make_node('1.2.3.1'), self.make_node('1.2.3.2')]
+                await self.advance(1)
+                node = None
+                try:
+                    urls = [('first.example', 4444), ('second.example', 4444)]
+                    answers = ['1.2.3.1', '1.2.3.2']
+                    urls.insert(failed_position, ('unavailable.example', 4444))
+                    answers.insert(failed_position, socket.gaierror('hostname unavailable'))
+                    with mock.patch('lbry.dht.node.resolve_host', side_effect=answers) as resolve:
+                        node = self.make_node('1.2.3.3', urls)
+                        await self.advance(0)
+                        # Routing-table updates are batched every 100 ms.
+                        await self.advance(0.1)
+                        await self.advance(1)
+
+                        self.assertTrue(node.joined.is_set())
+                        self.assertEqual(
+                            {seed.protocol.node_id for seed in seeds},
+                            {peer.node_id for peer in node.protocol.routing_table.get_peers()}
+                        )
+                        self.assertEqual(
+                            [mock.call(host, port, 'udp') for host, port in urls], resolve.await_args_list
+                        )
+                finally:
+                    if node is not None:
+                        node.stop()
+                    for seed in seeds:
+                        seed.stop()
+                    await self.advance(0)
+
+    async def test_retries_after_all_seed_hostnames_fail(self):
+        with dht_mocks.mock_network_loop(self.loop):
+            seeds = [self.make_node('1.2.3.1'), self.make_node('1.2.3.2')]
+            await self.advance(0)
+            answers = [socket.gaierror('hostname unavailable'), socket.gaierror('hostname unavailable'),
+                       '1.2.3.1', '1.2.3.2']
+            with mock.patch('lbry.dht.node.resolve_host', side_effect=answers) as resolve:
+                node = self.make_node('1.2.3.3', [('first.example', 4444), ('second.example', 4444)])
+                try:
+                    await self.advance(0)
+                    self.assertFalse(node.joined.is_set())
+                    self.assertEqual(2, resolve.await_count)
+                    await self.advance(29)
+                    self.assertEqual(2, resolve.await_count)
+                    await self.advance(1)
+                    await self.advance(1)
+                    self.assertEqual(4, resolve.await_count)
+                    self.assertTrue(node.joined.is_set())
+                finally:
+                    node.stop()
+                    for seed in seeds:
+                        seed.stop()
+                    await self.advance(0)
 
 
 class TestBootstrapNode(AsyncioTestCase):
